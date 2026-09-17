@@ -1,0 +1,81 @@
+{
+  "applications": [
+    {
+      "id": "f2home",
+      "name": "F2Home",
+      "shortName": "F2H",
+      "icon": "Home",
+      "modules": [
+        {
+          "id": "welcome",
+          "name": "Home",
+          "path": "/app/welcome",
+          "icon": "Home"
+        },
+        {
+          "id": "vegetables",
+          "name": "Vegetables",
+          "path": "/app/marketplace/vegetables",
+          "icon": "Carrot",
+          "allowedRoles": ["CUSTOMER", "FARMER", "ADMIN"]
+        },
+        {
+          "id": "fruits",
+          "name": "Fruits",
+          "path": "/app/marketplace/fruits",
+          "icon": "Apple",
+          "allowedRoles": ["CUSTOMER", "FARMER", "ADMIN"]
+        },
+        {
+          "id": "rice-grains",
+          "name": "Rice & Grains",
+          "path": "/app/marketplace/rice-grains",
+          "icon": "Wheat",
+          "allowedRoles": ["CUSTOMER", "FARMER", "ADMIN"]
+        },
+        {
+          "id": "dhals-pulses",
+          "name": "Dhals & Pulses",
+          "path": "/app/marketplace/dhals-pulses",
+          "icon": "Bean",
+          "allowedRoles": ["CUSTOMER", "FARMER", "ADMIN"]
+        },
+        {
+          "id": "sheep-livestock",
+          "name": "Sheep & Livestock",
+          "path": "/app/marketplace/sheep-livestock",
+          "icon": "PawPrint",
+          "allowedRoles": ["CUSTOMER", "FARMER", "ADMIN"]
+        },
+        {
+          "id": "dairy-poultry",
+          "name": "Dairy & Poultry",
+          "path": "/app/marketplace/dairy-poultry",
+          "icon": "Egg",
+          "allowedRoles": ["CUSTOMER", "FARMER", "ADMIN"]
+        },
+        {
+          "id": "spices-herbs",
+          "name": "Spices & Herbs",
+          "path": "/app/marketplace/spices-herbs",
+          "icon": "Flame",
+          "allowedRoles": ["CUSTOMER", "FARMER", "ADMIN"]
+        },
+        {
+          "id": "my-products",
+          "name": "My Products",
+          "path": "/app/farm/products",
+          "icon": "Sprout",
+          "allowedRoles": ["FARMER", "ADMIN"]
+        },
+        {
+          "id": "my-orders",
+          "name": "My Orders",
+          "path": "/app/orders",
+          "icon": "Package",
+          "allowedRoles": ["CUSTOMER", "ADMIN"]
+        }
+      ]
+    }
+  ]
+}
