@@ -30,6 +30,21 @@ jobs:
         working-directory: backend
         run: mvn clean package -DskipTests
 
+      - name: Verify Required Secrets
+        run: |
+          missing=0
+          for secret_name in DROPLET_SSH_KEY DROPLET_HOST DROPLET_USER; do
+            if [ -z "$(printenv "$secret_name")" ]; then
+              echo "::error::Repository secret '$secret_name' is not set. Add it under Settings > Secrets and variables > Actions."
+              missing=1
+            fi
+          done
+          exit $missing
+        env:
+          DROPLET_SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
+          DROPLET_USER: ${{ secrets.DROPLET_USER }}
+
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
