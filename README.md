@@ -10,7 +10,8 @@ F2Home — a farmer-to-customer marketplace. Farmers list produce, customers bro
 | Environment | Web | API |
 | --- | --- | --- |
 | local | `http://f2home.com` (add `127.0.0.1 f2home.com` to your hosts file) | `http://localhost:8081` |
-| dev | `https://dev.f2home.com` | `https://api-dev.f2home.com` |
+| dev | `https://maruthi-user.github.io/F2Home/` (GitHub Pages preview) | none yet - see `apiSlice.js` |
+| dev (cloud) | `https://dev.f2home.com` | `https://api-dev.f2home.com` |
 | prod | `https://f2home.com` | `https://api.f2home.com` |
 
 The database name is `F2Home` in every environment — see
@@ -53,7 +54,8 @@ F2Home/
 │       ├── redux/                store, RTK Query apiSlice, auth + processing slices
 │       ├── context/              LayoutContext
 │       └── utils/                jwt, publicPaths, permissions, marketplaceDb (IndexedDB)
-└── .github/workflows/            dev deploy: build -> DigitalOcean droplet -> nginx
+└── .github/workflows/            dev deploy: build -> GitHub Pages (free preview);
+                                     devf2home-droplet.yml: manual droplet deploy for later
 ```
 
 ## Getting started
@@ -83,8 +85,8 @@ npm run lint
 
 `src/redux/slices/apiSlice.js` derives the API base URL from the hostname, so
 `npm run dev` on localhost talks to `http://localhost:8081` with no config.
-`frontend/f2home/build` is the Capacitor `webDir`, and is also what the deploy
-workflow rsyncs to the droplet.
+`frontend/f2home/build` is the Capacitor `webDir`, and is also what the
+GitHub Pages deploy workflow publishes (under the `/F2Home/` base path).
 
 ## Where the data lives
 

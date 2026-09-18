@@ -24,6 +24,14 @@ if (Capacitor.isNativePlatform()) {
   BASE_URL = "https://api.f2home.com";
 } else if (isLocalDevHost) {
   BASE_URL = "http://localhost:8081";
+} else if (host.endsWith(".github.io")) {
+  // GitHub Pages dev preview - no backend is deployed there (Pages is static
+  // hosting only). The site calls a backend running on the visitor's own
+  // machine; Chrome/Edge allow an https page to talk to http://localhost.
+  // The backend must CORS-allow the *.github.io origin (see
+  // F2HomeSecurityConfiguration). Once the dev cloud instance exists, switch
+  // this to "https://api-dev.f2home.com".
+  BASE_URL = "http://localhost:8081";
 } else if (host === "192.168.0.151") {
   BASE_URL = "http://192.168.0.151:8081";
 } else if (host === "dev.f2home.com") {
@@ -45,6 +53,17 @@ const rawBaseQuery = fetchBaseQuery({
   },
 });
 
+// On GitHub Pages the app is served under a sub path (e.g. /F2Home/), so the
+// raw window pathname must have that prefix stripped before it is matched
+// against PUBLIC_PATHS (which are root-relative, e.g. /auth/login).
+const BASE_PATH = import.meta.env.BASE_URL.replace(/\/$/, "");
+function stripBasePath(pathname) {
+  if (!BASE_PATH) return pathname;
+  return pathname.startsWith(BASE_PATH)
+    ? pathname.slice(BASE_PATH.length) || "/"
+    : pathname;
+}
+
 // If the JWT has expired or is otherwise rejected by the backend, clear the
 // session so the app shows the "session expired" modal and redirects to the
 // login page (see AuthExpiryWatcher). Excluded:
@@ -58,7 +77,7 @@ const baseQueryWithAuthLogout = async (args, api, extraOptions) => {
   if (
     result.error?.status === 401 &&
     api.endpoint !== "login" &&
-    !isPublicPath(window.location.pathname)
+    !isPublicPath(stripBasePath(window.location.pathname))
   ) {
     api.dispatch(expireSession());
   }

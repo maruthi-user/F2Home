@@ -4,6 +4,11 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  // VITE_BASE_PATH lets the GitHub Pages deploy serve the app from the
+  // /<repo>/ sub path (e.g. /F2Home/) while local / Capacitor builds stay at
+  // the root. Set by .github/workflows/devf2home.yml. Accessed via globalThis
+  // so ESLint's browser no-undef rule does not flag the bare identifier.
+  base: globalThis.process?.env?.VITE_BASE_PATH || "/",
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

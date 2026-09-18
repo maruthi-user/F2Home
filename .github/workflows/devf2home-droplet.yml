@@ -1,0 +1,294 @@
+name: Deploy Dev F2Home to Cloud Droplet (Manual)
+
+# The full dev environment deploy: builds frontend + backend, provisions a
+# DigitalOcean droplet over SSH and serves it with nginx. Kept for when the
+# cloud instance is created - it is manual-trigger only (workflow_dispatch)
+# so it does not fail on every push while no droplet/secrets exist yet.
+# Required secrets: DROPLET_SSH_KEY, DROPLET_HOST, DROPLET_USER.
+# For the free GitHub Pages dev preview, see devf2home.yml.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build React Frontend
+        working-directory: frontend/f2home
+        run: |
+          npm install
+          npm run build
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: temurin
+
+      - name: Build Spring Boot Backend
+        working-directory: backend
+        run: mvn clean package -DskipTests
+
+      - name: Verify Required Secrets
+        run: |
+          missing=0
+          for secret_name in DROPLET_SSH_KEY DROPLET_HOST DROPLET_USER; do
+            if [ -z "$(printenv "$secret_name")" ]; then
+              echo "::error::Repository secret '$secret_name' is not set. Add it under Settings > Secrets and variables > Actions."
+              missing=1
+            fi
+          done
+          exit $missing
+        env:
+          DROPLET_SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
+          DROPLET_USER: ${{ secrets.DROPLET_USER }}
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DROPLET_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.DROPLET_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Provision Droplet
+        run: |
+          ssh ${{ secrets.DROPLET_USER }}@${{ secrets.DROPLET_HOST }} << 'EOF'
+          set -e
+          apt-get update
+          apt-get install -y openjdk-17-jre nginx
+          mkdir -p /opt/devf2home/frontend
+          mkdir -p /opt/devf2home/backend
+
+          #################################################
+          # Swap
+          #
+          # DigitalOcean droplets ship with no swap, so a momentary spike
+          # past physical RAM is handled by the kernel OOM-killer - the
+          # process is killed outright rather than slowed down. A small
+          # swap file turns that failure into degraded performance.
+          #################################################
+          if [ ! -f /swapfile ]; then
+            fallocate -l 2G /swapfile
+            chmod 600 /swapfile
+            mkswap /swapfile
+            swapon /swapfile
+            echo '/swapfile none swap sw 0 0' >> /etc/fstab
+          fi
+
+          #################################################
+          # Purge export temp files left behind by clients that
+          # disconnected mid-download.
+          #################################################
+          echo 'd /opt/devf2home/backend/tmp 0755 root root 1d' \
+            > /etc/tmpfiles.d/devf2home-exports.conf
+          EOF
+
+      - name: Deploy Frontend
+        run: |
+          rsync -avz --delete \
+            frontend/f2home/build/ \
+            ${{ secrets.DROPLET_USER }}@${{ secrets.DROPLET_HOST }}:/opt/devf2home/frontend/
+
+      - name: Deploy Backend
+        run: |
+          # Upload beside the live jar, never over it. A Spring Boot fat jar
+          # is read lazily for the whole life of the process - classes and
+          # bundled libraries are pulled from it on first use - so replacing
+          # the file under a running JVM makes every not-yet-loaded class
+          # fail with NoClassDefFoundError. The swap happens below, while
+          # the service is stopped.
+          scp backend/target/*.jar \
+            ${{ secrets.DROPLET_USER }}@${{ secrets.DROPLET_HOST }}:/opt/devf2home/backend/devf2home-backend.jar.new
+
+      - name: Configure Services
+        run: |
+          ssh ${{ secrets.DROPLET_USER }}@${{ secrets.DROPLET_HOST }} << 'EOF'
+          set -e
+
+
+          mkdir -p /opt/devf2home/backend/heapdumps
+
+          #################################################
+          # Backend service
+          #
+          # Run under systemd rather than `nohup ... &` so the process is
+          # supervised: if the JVM dies (OOM, uncaught error, host reboot)
+          # it is restarted automatically instead of staying down until
+          # someone notices and SSHs in.
+          #
+          # -Xmx is set explicitly because the JVM otherwise defaults to a
+          # quarter of host RAM, which silently changes if the droplet is
+          # resized. On OOM the process dumps the heap and exits so systemd
+          # can restart it, rather than thrashing the GC at ~100% CPU.
+          #################################################
+          cat > /etc/systemd/system/devf2home-backend.service << 'UNIT'
+          [Unit]
+          Description=Dev F2Home Backend
+          After=network.target
+
+          [Service]
+          Type=simple
+          WorkingDirectory=/opt/devf2home/backend
+          ExecStart=/usr/bin/java \
+            -Xms512m -Xmx1024m \
+            -XX:+UseG1GC \
+            -XX:MaxGCPauseMillis=200 \
+            -XX:+HeapDumpOnOutOfMemoryError \
+            -XX:HeapDumpPath=/opt/devf2home/backend/heapdumps \
+            -XX:+ExitOnOutOfMemoryError \
+            -Djava.io.tmpdir=/opt/devf2home/backend/tmp \
+            -jar /opt/devf2home/backend/devf2home-backend.jar
+          Restart=on-failure
+          RestartSec=5
+          SuccessExitStatus=143
+          StandardOutput=append:/opt/devf2home/backend/app.log
+          StandardError=append:/opt/devf2home/backend/app.log
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+
+          # Exports stream through temp files; keep them on the app's own
+          # directory so they are easy to find and purge.
+          mkdir -p /opt/devf2home/backend/tmp
+
+          systemctl daemon-reload
+          systemctl enable devf2home-backend
+
+          #################################################
+          # Swap the jar only while nothing is running against it.
+          #
+          # Stop first, then move the uploaded file into place, then start.
+          # Any stray process still holding port 8081 (e.g. one started
+          # before this unit existed) is killed too, otherwise it keeps
+          # serving stale classes and the new process cannot bind.
+          #################################################
+          systemctl stop devf2home-backend || true
+
+          if fuser -k 8081/tcp 2>/dev/null; then
+            echo "killed a leftover process holding port 8081"
+          fi
+
+          for i in $(seq 1 15); do
+            fuser 8081/tcp >/dev/null 2>&1 || break
+            sleep 1
+          done
+
+          if fuser 8081/tcp >/dev/null 2>&1; then
+            echo "port 8081 still held after 15s - aborting rather than deploying onto a live JVM"
+            exit 1
+          fi
+
+          mv /opt/devf2home/backend/devf2home-backend.jar.new \
+             /opt/devf2home/backend/devf2home-backend.jar
+
+          systemctl start devf2home-backend
+
+
+          cat > /etc/nginx/sites-available/devf2home << 'NGINX'
+
+          ############################
+          # HTTP → HTTPS REDIRECT
+          ############################
+          server {
+              listen 80;
+              server_name dev.f2home.com api-dev.f2home.com;
+              return 301 https://$host$request_uri;
+          }
+
+          ############################
+          # FRONTEND – HTTPS
+          ############################
+          server {
+              listen 443 ssl;
+              server_name dev.f2home.com;
+
+              ssl_certificate /etc/letsencrypt/live/dev.f2home.com/fullchain.pem;
+              ssl_certificate_key /etc/letsencrypt/live/dev.f2home.com/privkey.pem;
+
+              root /opt/devf2home/frontend;
+              index index.html;
+
+              location / {
+                  try_files $uri $uri/ /index.html;
+              }
+
+              location /health {
+                  return 200 "OK";
+              }
+          }
+
+          ############################
+          # BACKEND – HTTPS
+          ############################
+          server {
+              listen 443 ssl;
+              server_name api-dev.f2home.com;
+
+              ssl_certificate /etc/letsencrypt/live/dev.f2home.com/fullchain.pem;
+              ssl_certificate_key /etc/letsencrypt/live/dev.f2home.com/privkey.pem;
+
+              client_max_body_size 10m;
+
+              location / {
+                  proxy_pass http://127.0.0.1:8081;
+                  proxy_http_version 1.1;
+                  proxy_request_buffering off;
+
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto https;
+
+                  proxy_read_timeout 300s;
+                  proxy_send_timeout 300s;
+              }
+          }
+
+          NGINX
+
+
+          #################################################
+          # Remove Default Site
+          #################################################
+          rm -f /etc/nginx/sites-enabled/default
+
+          #################################################
+          # Enable Dev F2Home Site
+          #################################################
+          ln -sf \
+            /etc/nginx/sites-available/devf2home \
+            /etc/nginx/sites-enabled/devf2home
+
+          #################################################
+          # Show Enabled Sites (Optional)
+          #################################################
+          ls -l /etc/nginx/sites-enabled/
+
+          nginx -t
+          systemctl restart nginx
+
+          #################################################
+          # Verify Port 443
+          #################################################
+          ss -tulnp | grep 443 || true
+          
+          EOF
+
+      - name: Backend Health Check
+        run: |
+          for i in {1..17}; do
+            if curl -fsS http://${{ secrets.DROPLET_HOST }}:8081/actuator/health; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
