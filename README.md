@@ -10,8 +10,7 @@ F2Home — a farmer-to-customer marketplace. Farmers list produce, customers bro
 | Environment | Web | API |
 | --- | --- | --- |
 | local | `http://f2home.com` (add `127.0.0.1 f2home.com` to your hosts file) | `http://localhost:8081` |
-| dev | `https://maruthi-user.github.io/F2Home/` (GitHub Pages preview) | none yet - see `apiSlice.js` |
-| dev (cloud) | `https://dev.f2home.com` | `https://api-dev.f2home.com` |
+| dev | not hosted - Dev is GitHub Actions CI only (see [Development workflow](#development-workflow)) | not hosted |
 | prod | `https://f2home.com` | `https://api.f2home.com` |
 
 The database name is `F2Home` in every environment — see
@@ -54,8 +53,7 @@ F2Home/
 │       ├── redux/                store, RTK Query apiSlice, auth + processing slices
 │       ├── context/              LayoutContext
 │       └── utils/                jwt, publicPaths, permissions, marketplaceDb (IndexedDB)
-└── .github/workflows/            dev deploy: build -> GitHub Pages (free preview);
-                                     devf2home-droplet.yml: manual droplet deploy for later
+└── .github/workflows/dev.yml     Dev CI: build + test + validate on GitHub Actions (no deploy)
 ```
 
 ## Getting started
@@ -85,8 +83,23 @@ npm run lint
 
 `src/redux/slices/apiSlice.js` derives the API base URL from the hostname, so
 `npm run dev` on localhost talks to `http://localhost:8081` with no config.
-`frontend/f2home/build` is the Capacitor `webDir`, and is also what the
-GitHub Pages deploy workflow publishes (under the `/F2Home/` base path).
+`frontend/f2home/build` is the Capacitor `webDir`, and is also the artifact the
+Dev CI workflow uploads after a successful build.
+
+## Development workflow
+
+```text
+Local code -> GitHub -> GitHub Actions (Dev CI) -> build / test / validate
+```
+
+`.github/workflows/dev.yml` runs on every push and pull request to `main`:
+
+- **Frontend** - `npm ci`, `npm run lint` (non-blocking), `npm run build`; uploads `build/` as an artifact.
+- **Backend** - `./mvnw verify` (compile, unit tests, package); uploads the jar and the Surefire reports.
+
+It deploys nothing and needs no secrets. There is no hosted Dev environment;
+GitHub Actions is the Dev environment. Production deployment to a DigitalOcean
+Droplet will be a separate workflow, added once Dev testing is complete.
 
 ## Where the data lives
 

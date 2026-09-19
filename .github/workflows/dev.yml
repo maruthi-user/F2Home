@@ -1,0 +1,112 @@
+name: Dev CI
+
+# Development pipeline: Local -> GitHub -> GitHub Actions -> build / test / validate.
+#
+# This workflow only proves the code builds and the tests pass. It deploys
+# nothing, needs no secrets, and talks to no server. Production deployment
+# (DigitalOcean Droplet) is a separate workflow that does not exist yet.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Re-run the current main by hand from the Actions tab.
+  workflow_dispatch:
+
+# The default GITHUB_TOKEN only needs to read the repository.
+permissions:
+  contents: read
+
+# A newer push to the same branch / PR cancels the run still in progress.
+concurrency:
+  group: dev-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend - build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/f2home
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/f2home/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (non-blocking)
+        # The codebase has existing ESLint errors. Report them in the log
+        # without failing the build until they are cleaned up.
+        continue-on-error: true
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/f2home/build
+          retention-days: 7
+          if-no-files-found: error
+
+  backend:
+    name: Backend - test and package
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: temurin
+          cache: maven
+
+      - name: Test and package
+        # verify = compile + unit tests (Mockito only, no database) + jar.
+        # Uses the committed Maven wrapper so the Maven version is pinned.
+        run: ./mvnw -B --no-transfer-progress verify
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-reports
+          path: backend/target/surefire-reports
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Upload jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-jar
+          path: backend/target/*.jar
+          retention-days: 7
+          if-no-files-found: error
+
+  validate:
+    name: Dev CI summary
+    runs-on: ubuntu-latest
+    needs: [frontend, backend]
+    steps:
+      - name: All checks passed
+        run: |
+          echo "Frontend build : OK"
+          echo "Backend tests  : OK"
+          echo "Backend jar    : OK"

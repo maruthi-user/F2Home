@@ -4,13 +4,18 @@ Thumbs.db
 nul
 .idea/
 idea/**
-.vscode/
+# Git cannot re-include a file inside an excluded directory, so exclude the
+# directory's contents (not the directory) and whitelist the shared settings.
+.vscode/*
 !.vscode/settings.json
 
 ### AI agent tooling (local only) ###
 .claude/
 claude/**
 .kilo/
+# GitHub Copilot "Java upgrade" session logs (written next to the workflows)
+.github/modernize/
+backend/.github/
 
 ### Build output ###
 build/
@@ -23,5 +28,7 @@ out/
 .env.*
 !*.env.example
 
-### One-off migration scratch ###
-migration/
+### One-off migration scratch (repo root only) ###
+# Anchored so it never matches the real Flyway migrations under
+# backend/src/main/resources/db/migration/, which must be committed.
+/migration/
