@@ -136,6 +136,32 @@ class F2HomeAuthServiceTest {
     }
 
     @Test
+    void loginAcceptsBareTenDigitIndianNumber() {
+        // The UI shows a fixed +91 and the user types only the 10 digits; the
+        // service must look the account up by its stored E.164 form.
+        when(rateLimiter.tryLoginAttempt(PHONE)).thenReturn(true);
+        F2HomeUser user = activeUser();
+        when(userRepository.findByPhoneNumber(PHONE)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("Secret@123", "bcrypt-hash")).thenReturn(true);
+        when(jwtService.generateToken(any(F2HomeUser.class))).thenReturn("access-token");
+        when(jwtService.getExpirationTime()).thenReturn(900000L);
+
+        AuthResponse response = authService.login("98765 43210", "Secret@123");
+
+        assertThat(response.accessToken()).isEqualTo("access-token");
+        assertThat(response.user().phoneNumber()).isEqualTo(PHONE);
+        verify(userRepository, never()).findByPhoneNumber("98765 43210");
+    }
+
+    @Test
+    void loginRejectsMalformedNumberBeforeTouchingTheDatabase() {
+        assertThatCode(() -> authService.login("12345", "Secret@123"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("valid mobile number");
+        verify(userRepository, never()).findByPhoneNumber(any());
+    }
+
+    @Test
     void refreshRotatesTokens() {
         RefreshToken stored = new RefreshToken();
         stored.setUserId(1L);

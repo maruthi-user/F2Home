@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { User, Lock, Eye, EyeOff, Linkedin, Globe, Instagram, Twitter, Loader } from "lucide-react";
+import { Lock, Eye, EyeOff, Loader } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useLoginMutation } from "@/redux/f2home/authApi";
 import { useNavigate } from "react-router-dom";
@@ -10,7 +10,10 @@ import { useDispatch } from "react-redux";
 import { setTokenData, setUserData } from "@/redux/slices/authSlice";
 import { apiSlice } from "./redux/slices/apiSlice";
 import { runWithProcessingLock } from "@/utils/processingLock";
+import PhoneField from "./components/common/PhoneField";
+import { toE164, fromE164 } from "@/utils/phone";
 
+const REMEMBER_KEY = "f2home-remembered-phone";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -23,14 +26,23 @@ export default function LoginPage() {
 
   const [login] = useLoginMutation();
 
+  const rememberedPhone = (() => {
+    try {
+      return localStorage.getItem(REMEMBER_KEY) || "";
+    } catch {
+      return "";
+    }
+  })();
+
   const {
     register,
     handleSubmit,
     formState: { errors },
   } = useForm({
     defaultValues: {
-      phoneNumber: "",
+      phoneNumber: fromE164(rememberedPhone),
       password: "",
+      remember: !!rememberedPhone,
     },
   });
 
@@ -41,7 +53,17 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      const loginRes = await login(formData).unwrap();
+      // The field holds the 10 local digits; the API gets +91XXXXXXXXXX.
+      const phoneNumber = toE164(formData.phoneNumber);
+      const loginRes = await login({ phoneNumber, password: formData.password }).unwrap();
+
+      // "Remember me" only keeps the phone number pre-filled - never the password.
+      try {
+        if (formData.remember) localStorage.setItem(REMEMBER_KEY, phoneNumber);
+        else localStorage.removeItem(REMEMBER_KEY);
+      } catch {
+        // storage unavailable - nothing to remember
+      }
 
       dispatch(
         setTokenData({
@@ -74,173 +96,118 @@ export default function LoginPage() {
     }
   };
 
+  const inputClass = (invalid) =>
+    `w-full rounded-lg border bg-white py-2.5 pl-10 pr-4 text-sm text-gray-800 lg:py-3 outline-none transition placeholder:text-gray-400 focus:ring-2 ${
+      invalid
+        ? "border-red-400 focus:ring-red-200"
+        : "border-gray-200 focus:border-[#7cb342] focus:ring-[#7cb342]/25"
+    }`;
+
   return (
-    <div className="fixed inset-0 z-[50] min-h-screen bg-[#f7faf3] flex overflow-hidden ">
-      {/* Left brand panel - hero banner (logo/tagline/badges already baked
-          into the image), cropped from the left so the branding stays fully
-          visible and only the photo's right edge is cropped by a narrower
-          viewport. */}
-      <div className="hidden md:flex relative w-1/2 items-center justify-center overflow-hidden">
-        <img
-          src={loginHeroImage}
-          alt="F2Home — From Farm to Home. Bringing nature closer to you."
-          className="absolute inset-0 h-full w-full object-cover object-left"
-        />
-      </div>
+    // The brand artwork is the whole backdrop (logo, badges, tagline and the
+    // farmer are all part of the image and stay fully visible on the left).
+    // The login card is a frosted panel on the right, vertically centred
+    // over the field - it never has to dodge the logo, so it looks the same
+    // on a 13" laptop and a 27" monitor. On phones it is simply centred.
+    <div className="fixed inset-0 z-[50] overflow-y-auto bg-[#f3f8ee]">
+      <img
+        src={loginHeroImage}
+        alt=""
+        aria-hidden
+        className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover object-[30%_center] md:object-[left_center]"
+      />
+      {/* Slight darkening on the right so the white card reads against the
+          bright sky/field no matter the crop. */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-l from-black/25 via-transparent to-transparent md:from-black/20" />
 
-      <div className="flex w-full md:w-1/2 items-center justify-center px-6 py-10">
-        <div className="w-full max-w-md">
-          <div className="md:hidden flex justify-center mb-8">
-            <div className="w-44">
-              <F2HomeLogo className="w-full h-auto" showTagline={false} />
-            </div>
-          </div>
+      <div className="relative flex min-h-full flex-col items-center justify-center px-4 py-6 md:items-end md:px-[6vw] lg:px-[7vw]">
+        <div className="w-full max-w-[400px] rounded-2xl bg-white/[0.93] p-5 shadow-[0_24px_70px_-20px_rgba(20,40,15,0.6)] ring-1 ring-white/60 backdrop-blur-md sm:p-6 lg:max-w-[440px] lg:p-7">
+          <h1 className="text-xl font-bold text-[#1f2a1f] lg:text-2xl">Welcome Back</h1>
+          <p className="mt-0.5 text-xs text-gray-500 lg:text-sm">Login to your f2home account</p>
 
-          <h1 className="text-center text-4xl font-bold text-[#3c3c3c] mb-10">
-            Sign In
-          </h1>
-
-          <form onSubmit={handleSubmit((data) => runWithProcessingLock(() => onSubmit(data), "Signing in…"))} className="space-y-5">
-            <div>
-              <div className="relative">
-                <User className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
-                <input
-                  type="text"
-                  placeholder="Phone Number (e.g. +919876543210)"
-                  autoComplete="username"
-                  {...register("phoneNumber", {
-                    required: "Phone number is required",
-                    pattern: {
-                      value: /^\+[1-9]\d{7,14}$/,
-                      message: "Enter a valid phone number with country code, e.g. +919876543210",
-                    },
-                  })}
-                  className={`w-full rounded-full bg-[#eef3e6] pl-14 pr-5 py-4 text-gray-700 outline-none border ${errors.phoneNumber
-                      ? "border-red-500"
-                      : "border-transparent focus:border-[#7cb342]"
-                    }`}
-                />
-              </div>
-              {errors.phoneNumber && (
-                <p className="mt-2 text-sm text-red-500 ml-3">
-                  {errors.phoneNumber.message}
-                </p>
-              )}
-            </div>
+          <form
+            onSubmit={handleSubmit((data) => runWithProcessingLock(() => onSubmit(data), "Signing in…"))}
+            className="mt-4 space-y-3"
+          >
+            <PhoneField register={register} name="phoneNumber" error={errors.phoneNumber} placeholder="Mobile number" />
 
             <div>
               <div className="relative">
-                <Lock className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
+                <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <input
                   type={showPassword ? "text" : "password"}
                   placeholder="Password"
                   autoComplete="current-password"
-                  {...register("password", {
-                    required: "Password is required",
-                  })}
-                  className={`w-full rounded-full bg-[#eef3e6] pl-14 pr-14 py-4 text-gray-700 outline-none border ${errors.password
-                      ? "border-red-500"
-                      : "border-transparent focus:border-[#7cb342]"
-                    }`}
+                  {...register("password", { required: "Password is required" })}
+                  className={`${inputClass(!!errors.password)} pr-11`}
                 />
-
                 <button
                   type="button"
                   onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-500"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                 >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5" />
-                  ) : (
-                    <Eye className="h-5 w-5" />
-                  )}
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-
               {errors.password && (
-                <p className="mt-2 text-sm text-red-500 ml-3">
-                  {errors.password.message}
-                </p>
+                <p className="mt-1 text-xs text-red-500">{errors.password.message}</p>
               )}
             </div>
 
-            <div className="flex items-center justify-between">
-              <Link
-                href="/auth/register"
-                className="pl-2 text-sm text-black hover:underline"
-              >
-                New here?{" "}
-                <span className="font-bold text-black hover:underline">
-                  Register
-                </span>
-              </Link>
+            <div className="flex items-center justify-between text-xs">
+              <label className="flex cursor-pointer items-center gap-2 text-gray-600">
+                <input
+                  type="checkbox"
+                  {...register("remember")}
+                  className="h-3.5 w-3.5 rounded border-gray-300 accent-[#33691e]"
+                />
+                Remember me
+              </label>
               <button
                 type="button"
                 onClick={() => navigate("/auth/forgot-password")}
-                className="text-sm text-black hover:underline cursor-pointer"
+                className="font-medium text-[#33691e] hover:underline"
               >
-                Forgot Password?
+                Forgot password?
               </button>
             </div>
 
             {apiError && (
-              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
                 {apiError}
               </div>
             )}
 
-            <div className="pt-2 flex flex-col items-center">
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="min-w-[140px] inline-flex items-center justify-center gap-2 rounded-full px-10 py-3 font-semibold text-white bg-gradient-to-r from-[#8bc34a] to-[#33691e] shadow-md hover:scale-[1.02] transition disabled:opacity-70 cursor-pointer"
-              >
-                {isSubmitting ? (
-                  <>
-                    Logging in...
-                  </>
-                ) : (
-                  "LOGIN"
-                )}
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#2e7d32] py-2.5 text-sm font-semibold lg:py-3 text-white shadow-md shadow-[#2e7d32]/30 transition hover:bg-[#33691e] disabled:opacity-70"
+            >
+              {isSubmitting ? "Signing in…" : "Login"}
+              {!isSubmitting && <span aria-hidden>→</span>}
+            </button>
           </form>
 
-          <div className="mt-12 text-center">
-            <p className="text-black text-lg mb-6">Follow us on social platforms</p>
+          {/* Google sign-in is not wired to the backend yet; shown disabled so
+              the layout is final and the button can be enabled later. */}
+          {/* <button
+            type="button"
+            disabled
+            title="Coming soon"
+            className="inline-flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white py-2.5 text-sm font-medium text-gray-500 opacity-70"
+          >
+            <GoogleMark />
+            Continue with Google
+            <span className="ml-1 rounded-full bg-gray-100 px-1.5 text-[10px] font-normal text-gray-500">soon</span>
+          </button> */}
 
-            <div className="flex justify-center gap-5">
-              {[
-                { Icon: Linkedin, href: "https://www.linkedin.com/company/f2home" },
-                { Icon: Globe, href: "https://f2home.com" },
-                { Icon: Instagram, href: "https://www.instagram.com/f2home" },
-                { Icon: Twitter, href: "https://twitter.com/f2home" },
-              ].map(({ Icon, href }, index) => (
-                <a
-                  key={index}
-                  type="button"
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="h-12 w-12 rounded-full border border-gray-600 flex items-center justify-center text-gray-700 hover:bg-white transition cursor-pointer"
-                >
-                  <Icon className="h-5 w-5" />
-                </a>
-              ))}
-            </div>
-            <p className="mt-6 text-sm text-gray-500">
-              © {new Date().getFullYear()}{" "}
-              <a
-                href="https://f2home.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[#2e7d32] font-semibold hover:underline"
-              >
-                f2home.com
-              </a>{" "}
-              — From Farm to Home
-            </p>
-          </div>
+          <p className="mt-3 text-center text-xs text-gray-500">
+            Don&rsquo;t have an account?{" "}
+            <Link href="/auth/register" className="font-semibold text-[#33691e] hover:underline">
+              Register
+            </Link>
+          </p>
         </div>
       </div>
 
@@ -258,3 +225,14 @@ export default function LoginPage() {
     </div>
   );
 }
+
+// Kept for when Google sign-in is wired up (see the commented button above).
+/*
+function GoogleMark() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
+      <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.2 1.3-1.5 3.8-5.5 3.8-3.3 0-6-2.7-6-6.1s2.7-6.1 6-6.1c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.8 3.2 14.6 2.2 12 2.2 6.6 2.2 2.3 6.6 2.3 12S6.6 21.8 12 21.8c5.6 0 9.3-3.9 9.3-9.5 0-.6-.1-1.1-.2-1.6H12z" />
+    </svg>
+  );
+}
+*/

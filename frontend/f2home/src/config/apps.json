@@ -69,6 +69,13 @@
           "allowedRoles": ["FARMER", "ADMIN"]
         },
         {
+          "id": "cart",
+          "name": "Cart",
+          "path": "/app/cart",
+          "icon": "ShoppingCart",
+          "allowedRoles": ["CUSTOMER"]
+        },
+        {
           "id": "my-orders",
           "name": "My Orders",
           "path": "/app/orders",

@@ -31,7 +31,8 @@ import {
   Cloud,
   Building,
   PlusCircle,
-  Circle
+  Circle,
+  ShoppingCart
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -52,6 +53,7 @@ import { Avatar, AvatarFallback } from '../../components/ui/avatar';
 import { Badge } from '../../components/ui/badge';
 import { ScrollArea } from '../../components/ui/scroll-area';
 import { apiSlice } from '../../redux/slices/apiSlice';
+import { selectCartCount } from '../../redux/slices/cartSlice';
 
 export function TopNav() {
   const { theme, toggleTheme, toggleLauncher } = useLayout();
@@ -59,6 +61,7 @@ export function TopNav() {
   const user = useSelector((state) => state.auth?.user || null);
   const token = useSelector((state) => state.auth.token);
   const refreshToken = useSelector((state) => state.auth?.refreshToken);
+  const cartCount = useSelector(selectCartCount);
   const [revokeRefreshToken] = useLogoutMutation();
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -132,13 +135,17 @@ export function TopNav() {
           <Grip className="h-5 w-5 sm:h-6 sm:w-6" />
         </Button>
 
-        <div className="flex items-center gap-2 font-semibold tracking-tight">
-          <div className="text-gray-800 dark:text-white w-24 sm:w-28 md:w-36 lg:w-40">
-
-            <F2HomeLogo className="w-full h-auto object-contain" showTagline={false} />
-
-          </div>
-        </div>
+        {/* Brand: sized by HEIGHT so the whole mark + "f2home" wordmark fits
+            inside the 64px bar (a width-sized 360x245 SVG overflowed and got
+            clipped at the bottom). Clicking it returns to Home. */}
+        <button
+          type="button"
+          onClick={() => navigate("/app/welcome")}
+          className="flex items-center h-16 py-1.5 cursor-pointer"
+          aria-label="F2Home home"
+        >
+          <F2HomeLogo className="h-full w-auto" showTagline={false} />
+        </button>
       </div>
 
       {/* Center: Global Search */}
@@ -222,6 +229,25 @@ export function TopNav() {
             </div>
           </DropdownMenuContent>
         </DropdownMenu> */}
+
+        {/* Cart - customers only. Count badge comes from the cart slice
+            (see redux/slices/cartSlice.js), which is per signed-in customer. */}
+        {user?.role === "CUSTOMER" && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="relative text-muted-foreground hover:text-foreground cursor-pointer"
+            onClick={() => navigate("/app/cart")}
+            aria-label={`Cart, ${cartCount} item${cartCount === 1 ? "" : "s"}`}
+          >
+            <ShoppingCart className="h-5 w-5" />
+            {cartCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[#33691e] text-white text-[10px] font-bold flex items-center justify-center">
+                {cartCount > 99 ? "99+" : cartCount}
+              </span>
+            )}
+          </Button>
+        )}
 
         <Button
           variant="ghost"

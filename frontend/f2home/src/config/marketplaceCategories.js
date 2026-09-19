@@ -18,3 +18,7 @@ export const getCategoryById = (id) =>
   MARKETPLACE_CATEGORIES.find((category) => category.id === id) || null;
 
 export const PRODUCT_UNITS = ["kg", "gram", "dozen", "litre", "piece"];
+
+// Short unit labels for tight spaces (product tiles, cart badges).
+const UNIT_ABBR = { kg: "kg", gram: "g", dozen: "dz", litre: "L", piece: "pc" };
+export const shortUnit = (unit) => UNIT_ABBR[unit] || unit;

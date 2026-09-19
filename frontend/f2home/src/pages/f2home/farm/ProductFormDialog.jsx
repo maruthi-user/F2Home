@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
-import { useSelector } from "react-redux";
-import { ImagePlus, Trash2, Video, X } from "lucide-react";
+import { Crosshair, ImagePlus, Loader, MapPin, Trash2, Video, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -23,12 +22,19 @@ import {
   PRODUCT_UNITS,
 } from "@/config/marketplaceCategories";
 import {
-  addProduct,
-  updateProduct,
-  MAX_IMAGE_SIZE_BYTES,
-  MAX_IMAGES_PER_PRODUCT,
-  MAX_VIDEO_SIZE_BYTES,
-} from "@/utils/marketplaceDb";
+  buildProductFormData,
+  mediaUrl,
+  useCreateProductMutation,
+  useGetMarketplaceRulesQuery,
+  useUpdateProductMutation,
+} from "@/redux/f2home/marketplaceApi";
+import {
+  getCurrentPosition,
+  reverseGeocode,
+  forwardGeocode,
+  formatCoords,
+  isValidCoords,
+} from "@/utils/geo";
 
 const fieldClass =
   "w-full rounded-2xl bg-[#eef3e6] px-4 py-3 text-gray-700 outline-none border border-transparent focus:border-[#7cb342]";
@@ -44,22 +50,43 @@ const emptyValues = {
   quantity: "",
 };
 
-// Add/edit dialog for a farmer's own listing. Images/video are held as plain
-// File objects in local state (not react-hook-form fields) so previews via
-// URL.createObjectURL are simple to manage; on submit they're written
-// straight into IndexedDB (see utils/marketplaceDb.js) - no upload endpoint,
-// no base64 conversion.
-export default function ProductFormDialog({ open, onOpenChange, product, onSaved }) {
-  const user = useSelector((state) => state.auth?.user || null);
+// Add/edit dialog for a farmer's own listing. New photos/video are held as
+// File objects in local state (previews via URL.createObjectURL); media the
+// listing already has is shown from its API URL and reported back as
+// keepMediaIds so the backend deletes whatever the farmer removed. Submit is
+// one multipart request (see buildProductFormData).
+export default function ProductFormDialog({ open, onOpenChange, product }) {
   const { toast } = useToast();
   const isEditing = Boolean(product);
+  const { data: rules } = useGetMarketplaceRulesQuery();
+  const [createProduct] = useCreateProductMutation();
+  const [updateProduct] = useUpdateProductMutation();
 
-  const [images, setImages] = useState([]); // File[]
+  // Limits come from the server rules; defaults only until they arrive.
+  const MAX_IMAGE_SIZE_BYTES = rules?.maxImageBytes ?? 4 * 1024 * 1024;
+  const MAX_IMAGES_PER_PRODUCT = rules?.maxImagesPerProduct ?? 5;
+  const MAX_VIDEO_SIZE_BYTES = rules?.maxVideoBytes ?? 25 * 1024 * 1024;
+
+  const [existingImages, setExistingImages] = useState([]); // [{ id, url }] already on the listing
+  const [existingVideo, setExistingVideo] = useState(null); // { id, url } | null
+  const [images, setImages] = useState([]); // File[] (new)
   const [imagePreviews, setImagePreviews] = useState([]); // string[] object URLs
-  const [video, setVideo] = useState(null); // File | null
+  const [video, setVideo] = useState(null); // File | null (new)
   const [videoPreview, setVideoPreview] = useState(null);
   const [fileError, setFileError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Where the produce is. Customers only see listings within 20 km of
+  // themselves, so a listing needs coordinates: from the device's GPS, or
+  // geocoded from the typed place name on submit (with a raw lat/lng
+  // fallback when geocoding is unreachable).
+  const [placeName, setPlaceName] = useState("");
+  const [coords, setCoords] = useState(null); // { lat, lng } | null
+  const [manualLat, setManualLat] = useState("");
+  const [manualLng, setManualLng] = useState("");
+  const [showCoords, setShowCoords] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationError, setLocationError] = useState("");
 
   const {
     register,
@@ -86,10 +113,83 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
           }
         : emptyValues
     );
-    setImages(product?.images || []);
-    setVideo(product?.video || null);
+    const media = product?.media || [];
+    setExistingImages(
+      media.filter((m) => m.type === "IMAGE").map((m) => ({ id: m.id, url: mediaUrl(m.url) }))
+    );
+    const v = media.find((m) => m.type === "VIDEO");
+    setExistingVideo(v ? { id: v.id, url: mediaUrl(v.url) } : null);
+    setImages([]);
+    setVideo(null);
     setFileError("");
+
+    setPlaceName(product?.location?.label || "");
+    setCoords(
+      product?.location?.lat != null
+        ? { lat: product.location.lat, lng: product.location.lng }
+        : null
+    );
+    setManualLat("");
+    setManualLng("");
+    setShowCoords(false);
+    setLocationError("");
   }, [open, product, reset]);
+
+  const handleUseCurrentLocation = async () => {
+    setIsLocating(true);
+    setLocationError("");
+    try {
+      const pos = await getCurrentPosition();
+      const next = { lat: pos.lat, lng: pos.lng };
+      setCoords(next);
+      const label = await reverseGeocode(next);
+      setPlaceName(label || `Current location (${formatCoords(next)})`);
+    } catch (err) {
+      setLocationError(err.message || "Unable to get your location.");
+    } finally {
+      setIsLocating(false);
+    }
+  };
+
+  const handlePlaceNameChange = (e) => {
+    setPlaceName(e.target.value);
+    // A hand-edited place no longer matches the stored coordinates.
+    setCoords(null);
+    setLocationError("");
+  };
+
+  const applyManualCoords = () => {
+    const next = { lat: Number(manualLat), lng: Number(manualLng) };
+    if (!isValidCoords(next)) {
+      setLocationError("Enter a valid latitude (-90..90) and longitude (-180..180).");
+      return;
+    }
+    setCoords(next);
+    setLocationError("");
+    if (!placeName.trim()) setPlaceName(formatCoords(next));
+  };
+
+  // Resolve the listing's location for saving. Returns null (and sets the
+  // error) when it cannot be determined.
+  const resolveLocation = async () => {
+    const label = placeName.trim();
+    if (!label && !coords) {
+      setLocationError("Add the product location - use your current location or type the place name.");
+      return null;
+    }
+    if (coords) return { ...coords, label: label || formatCoords(coords) };
+
+    const hit = await forwardGeocode(label);
+    if (!hit) {
+      setLocationError(
+        `Couldn't find "${label}". Use your current location, try a nearby town name, or enter coordinates.`
+      );
+      setShowCoords(true);
+      return null;
+    }
+    setCoords({ lat: hit.lat, lng: hit.lng });
+    return { lat: hit.lat, lng: hit.lng, label };
+  };
 
   // Build/revoke object URLs whenever the underlying File lists change.
   useEffect(() => {
@@ -115,14 +215,14 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
 
     setFileError("");
 
-    if (images.length + files.length > MAX_IMAGES_PER_PRODUCT) {
+    if (existingImages.length + images.length + files.length > MAX_IMAGES_PER_PRODUCT) {
       setFileError(`You can add up to ${MAX_IMAGES_PER_PRODUCT} images.`);
       return;
     }
 
     const tooBig = files.find((file) => file.size > MAX_IMAGE_SIZE_BYTES);
     if (tooBig) {
-      setFileError(`"${tooBig.name}" is over the 4MB limit per image.`);
+      setFileError(`"${tooBig.name}" is over the ${Math.round(MAX_IMAGE_SIZE_BYTES / 1048576)}MB limit per image.`);
       return;
     }
 
@@ -137,10 +237,12 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
     setFileError("");
 
     if (file.size > MAX_VIDEO_SIZE_BYTES) {
-      setFileError(`"${file.name}" is over the 25MB video limit.`);
+      setFileError(`"${file.name}" is over the ${Math.round(MAX_VIDEO_SIZE_BYTES / 1048576)}MB video limit.`);
       return;
     }
 
+    // A listing holds one video: a new upload replaces the existing one.
+    setExistingVideo(null);
     setVideo(file);
   };
 
@@ -150,9 +252,13 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
 
   const onSubmit = async (data) => {
     setFileError("");
+    setLocationError("");
     setIsSubmitting(true);
 
     try {
+      const location = await resolveLocation();
+      if (!location) return;
+
       const payload = {
         name: data.name.trim(),
         category: data.category,
@@ -160,24 +266,25 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
         price: Number(data.price),
         unit: data.unit,
         quantity: Number(data.quantity),
-        images,
-        video,
-        farmerPhone: user?.phoneNumber,
-        farmerName: user?.fullName,
+        location,
+        keepMediaIds: [
+          ...existingImages.map((m) => m.id),
+          ...(existingVideo ? [existingVideo.id] : []),
+        ],
       };
+      const formData = buildProductFormData(payload, images, video);
 
       if (isEditing) {
-        await updateProduct(product.id, payload);
+        await updateProduct({ id: product.id, formData }).unwrap();
         toast({ title: "Product updated", description: `${payload.name} has been updated.` });
       } else {
-        await addProduct(payload);
+        await createProduct(formData).unwrap();
         toast({ title: "Product listed", description: `${payload.name} is now live in the marketplace.` });
       }
 
-      onSaved?.();
       onOpenChange(false);
     } catch (err) {
-      setFileError(err.message || "Unable to save this product. Please try again.");
+      setFileError(err?.data?.message || err.message || "Unable to save this product. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -306,10 +413,71 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
           </div>
 
           <div>
+            <label className={labelClass}>Product Location</label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <MapPin className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#33691e]" />
+                <input
+                  type="text"
+                  value={placeName}
+                  onChange={handlePlaceNameChange}
+                  placeholder="Village / town where the produce is"
+                  className={`${fieldClass} pl-11`}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleUseCurrentLocation}
+                disabled={isLocating}
+                className="shrink-0 rounded-2xl border-[#8bc34a] text-[#33691e] hover:bg-[#f2f8ea]"
+                title="Use my current location"
+              >
+                {isLocating ? <Loader className="h-4 w-4 animate-spin" /> : <Crosshair className="h-4 w-4" />}
+                <span className="ml-1.5 hidden sm:inline">Current</span>
+              </Button>
+            </div>
+            <div className="mt-1.5 flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">
+                {coords ? `Pinned at ${formatCoords(coords)}` : "Customers within 20 km of this place will see it."}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowCoords((v) => !v)}
+                className="text-[#33691e] underline-offset-2 hover:underline"
+              >
+                {showCoords ? "Hide coordinates" : "Enter coordinates"}
+              </button>
+            </div>
+            {showCoords && (
+              <div className="mt-2 grid grid-cols-[1fr_1fr_auto] gap-2">
+                <input type="number" step="any" placeholder="Latitude" value={manualLat} onChange={(e) => setManualLat(e.target.value)} className={fieldClass} />
+                <input type="number" step="any" placeholder="Longitude" value={manualLng} onChange={(e) => setManualLng(e.target.value)} className={fieldClass} />
+                <Button type="button" onClick={applyManualCoords} className="rounded-2xl bg-[#33691e] text-white hover:opacity-90">Pin</Button>
+              </div>
+            )}
+            {locationError && (
+              <p className="mt-1 text-sm text-red-500">{locationError}</p>
+            )}
+          </div>
+
+          <div>
             <label className={labelClass}>
-              Photos ({images.length}/{MAX_IMAGES_PER_PRODUCT})
+              Photos ({existingImages.length + images.length}/{MAX_IMAGES_PER_PRODUCT})
             </label>
             <div className="flex flex-wrap gap-3">
+              {existingImages.map((m) => (
+                <div key={m.id} className="group relative h-20 w-20 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
+                  <img src={m.url} alt="" className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => setExistingImages((prev) => prev.filter((x) => x.id !== m.id))}
+                    className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition group-hover:opacity-100"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
               {imagePreviews.map((src, index) => (
                 <div key={src} className="group relative h-20 w-20 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
                   <img src={src} alt="" className="h-full w-full object-cover" />
@@ -323,7 +491,7 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
                 </div>
               ))}
 
-              {images.length < MAX_IMAGES_PER_PRODUCT && (
+              {existingImages.length + images.length < MAX_IMAGES_PER_PRODUCT && (
                 <label className="flex h-20 w-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-[#8bc34a] text-[#33691e] hover:bg-[#f2f8ea]">
                   <ImagePlus className="h-5 w-5" />
                   <span className="text-[10px]">Add</span>
@@ -341,12 +509,15 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
 
           <div>
             <label className={labelClass}>Video (optional)</label>
-            {videoPreview ? (
+            {videoPreview || existingVideo ? (
               <div className="relative w-full max-w-xs">
-                <video src={videoPreview} controls className="w-full rounded-xl" />
+                <video src={videoPreview || existingVideo.url} controls className="w-full rounded-xl" />
                 <button
                   type="button"
-                  onClick={() => setVideo(null)}
+                  onClick={() => {
+                    setVideo(null);
+                    setExistingVideo(null);
+                  }}
                   className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white"
                 >
                   <Trash2 className="h-3.5 w-3.5" />

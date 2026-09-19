@@ -3,7 +3,7 @@
 // gate visibility with allowedRoles; Sidebar/TopNav derive permissions from
 // this map.
 export const ROLE_PERMISSIONS = {
-  CUSTOMER: ["HOME_VIEW", "MARKETPLACE_VIEW", "PROFILE_VIEW"],
+  CUSTOMER: ["HOME_VIEW", "MARKETPLACE_VIEW", "CART_VIEW", "CHECKOUT", "PROFILE_VIEW"],
 
   FARMER: ["HOME_VIEW", "MARKETPLACE_VIEW", "MY_FARM_VIEW", "PROFILE_VIEW"],
 

@@ -6,7 +6,7 @@ import jakarta.validation.constraints.Pattern;
 public record ForgotPasswordRequest(
 
         @NotBlank(message = "Phone number is required")
-        @Pattern(regexp = "^\\+[1-9]\\d{7,14}$", message = "Phone number must be in E.164 format, e.g. +919876543210")
+        @Pattern(regexp = "^\\+?[\\d\\s().-]{8,20}$", message = "Enter a valid mobile number, e.g. 9876543210 or +919876543210")
         String phoneNumber
 ) {
 }

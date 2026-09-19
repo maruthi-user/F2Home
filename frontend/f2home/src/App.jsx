@@ -7,6 +7,7 @@ import { Suspense, lazy } from "react";
 import { Loader } from "lucide-react";
 import AuthExpiryWatcher from "./components/common/AuthExpiryWatcher";
 import ProcessingOverlay from "./components/common/ProcessingOverlay";
+import CartOwnerSync from "./components/common/CartOwnerSync";
 import F2HomeLogo from "./components/ui/F2HomeLogo";
 import { PUBLIC_PATHS } from "./utils/publicPaths";
 
@@ -15,6 +16,9 @@ const AppsPage = lazy(() => import("./pages/AppsPage"));
 const Welcome = lazy(() => import("./pages/f2home/Welcome"));
 const MarketplaceIndex = lazy(() => import("./pages/f2home/marketplace/MarketplaceIndex"));
 const CategoryPage = lazy(() => import("./pages/f2home/marketplace/CategoryPage"));
+const ProductDetailPage = lazy(() => import("./pages/f2home/marketplace/ProductDetailPage"));
+const CartPage = lazy(() => import("./pages/f2home/marketplace/CartPage"));
+const CheckoutPage = lazy(() => import("./pages/f2home/marketplace/CheckoutPage"));
 const MyProducts = lazy(() => import("./pages/f2home/farm/MyProducts"));
 const MyOrders = lazy(() => import("./pages/f2home/orders/MyOrders"));
 const RegisterPage = lazy(() => import("./pages/auth/RegisterPage"));
@@ -71,6 +75,9 @@ function AppRouter() {
         <Route path="/app/welcome" component={Welcome} />
         <Route path="/app/marketplace" component={MarketplaceIndex} />
         <Route path="/app/marketplace/:category" component={CategoryPage} />
+        <Route path="/app/marketplace/:category/:id" component={ProductDetailPage} />
+        <Route path="/app/cart" component={CartPage} />
+        <Route path="/app/checkout" component={CheckoutPage} />
         <Route path="/app/farm/products" component={MyProducts} />
         <Route path="/app/orders" component={MyOrders} />
 
@@ -99,6 +106,9 @@ function App() {
 
         {/* Auto-logout + redirect to login when the JWT expires */}
         <AuthExpiryWatcher />
+
+        {/* Loads the signed-in customer's persisted cart */}
+        <CartOwnerSync />
 
         {/* Global Toast */}
         <Toaster />

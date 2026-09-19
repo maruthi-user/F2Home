@@ -59,7 +59,8 @@ public class F2HomeAuthService {
     // ================= REGISTRATION: STEP 1 — REQUEST OTP =================
 
     @Transactional
-    public void requestRegistrationOtp(String phoneNumber, F2HomeRole role, String clientIp) {
+    public void requestRegistrationOtp(String rawPhoneNumber, F2HomeRole role, String clientIp) {
+        String phoneNumber = PhoneNumbers.normalize(rawPhoneNumber);
         if (role == F2HomeRole.ADMIN) {
             throw new BadRequestException("Admin accounts cannot self-register.");
         }
@@ -74,8 +75,9 @@ public class F2HomeAuthService {
     // ================= REGISTRATION: STEP 2 — VERIFY + CREATE =================
 
     @Transactional
-    public AuthResponse register(String phoneNumber, String otp, String fullName,
+    public AuthResponse register(String rawPhoneNumber, String otp, String fullName,
                                  String email, String password, F2HomeRole role) {
+        String phoneNumber = PhoneNumbers.normalize(rawPhoneNumber);
         if (role == F2HomeRole.ADMIN) {
             throw new BadRequestException("Admin accounts cannot self-register.");
         }
@@ -102,7 +104,8 @@ public class F2HomeAuthService {
     // ================= LOGIN (PHONE + PASSWORD) =================
 
     @Transactional
-    public AuthResponse login(String phoneNumber, String password) {
+    public AuthResponse login(String rawPhoneNumber, String password) {
+        String phoneNumber = PhoneNumbers.normalize(rawPhoneNumber);
         if (!rateLimiter.tryLoginAttempt(phoneNumber)) {
             throw new com.mrnpe.one.f2home.exception.RateLimitException(
                     "Too many login attempts. Please try again in 15 minutes.");
@@ -171,7 +174,8 @@ public class F2HomeAuthService {
     // ================= FORGOT PASSWORD =================
 
     @Transactional
-    public void forgotPassword(String phoneNumber) {
+    public void forgotPassword(String rawPhoneNumber) {
+        String phoneNumber = PhoneNumbers.normalize(rawPhoneNumber);
         boolean exists = userRepository.existsByPhoneNumber(phoneNumber);
         if (!exists) {
             // Deliberately silent: don't reveal whether the number is registered.
@@ -184,7 +188,8 @@ public class F2HomeAuthService {
     // ================= RESET PASSWORD =================
 
     @Transactional
-    public void resetPassword(String phoneNumber, String otp, String newPassword, String confirmPassword) {
+    public void resetPassword(String rawPhoneNumber, String otp, String newPassword, String confirmPassword) {
+        String phoneNumber = PhoneNumbers.normalize(rawPhoneNumber);
         if (!newPassword.equals(confirmPassword)) {
             throw new BadRequestException("Passwords do not match.");
         }

@@ -47,23 +47,23 @@ export default function Welcome() {
   );
 
   return (
-    <div className="p-6 md:p-8 max-w-5xl mx-auto">
-      <div className="rounded-3xl bg-gradient-to-r from-[#f2f8ea] via-[#d9eebf] to-[#8bc34a] p-8 md:p-10">
-        <h1 className="text-3xl md:text-4xl font-bold text-[#33691e]">
+    <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 sm:py-5">
+      <div className="rounded-2xl bg-gradient-to-r from-[#f2f8ea] via-[#e3f0d3] to-[#c5e1a5] px-5 py-5 sm:px-6">
+        <h1 className="text-xl font-bold text-[#33691e] sm:text-2xl">
           Welcome{user?.fullName ? `, ${user.fullName}` : ""}!
         </h1>
-        <p className="mt-2 text-[#2e7d32]">
-          Your F2Home account is ready. Bringing Nature Closer to You.
+        <p className="mt-1 text-sm text-[#2e7d32]">
+          Bringing Nature Closer to You.
         </p>
       </div>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {visibleCards.map(({ icon: Icon, title, description, path, comingSoon }) => (
           <Card
             key={title}
             onClick={() => path && navigate(path)}
-            className={`p-6 ${
-              path ? "cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md" : ""
+            className={`p-4 ${
+              path ? "cursor-pointer transition hover:-translate-y-0.5 hover:shadow-md" : "opacity-70"
             }`}
           >
             <div className="flex items-start gap-4">

@@ -5,6 +5,7 @@ import { Sidebar } from '../../components/layout/Sidebar';
 import { AppLauncher } from '../../components/layout/AppLauncher';
 import { cn } from '../../lib/utils';
 import { useLocation } from "wouter";
+import brandArtwork from "../../assets/images/login-hero.png";
 
 export const AppShell = React.memo(function AppShell({ children }) {
   const { activeAppId, isSidebarExpanded } = useLayout();
@@ -31,13 +32,27 @@ export const AppShell = React.memo(function AppShell({ children }) {
       : "sm:ml-12 ml-15";
   //const sidebarWidthClass = isSidebarExpanded ? "ml-64" : "ml-16";
   return (
-    <div className="min-h-screen bg-[var(--background-white)] text-foreground font-sans selection:bg-primary/20 selection:text-primary">
+    <div className="relative min-h-screen bg-[var(--background-white)] text-foreground font-sans selection:bg-primary/20 selection:text-primary">
+      {/* Brand watermark: the farmer artwork, very faint, fixed behind every
+          page so the app feels like the login screen without hurting
+          legibility. A white gradient fades it out towards the left where
+          the sidebar and text sit. */}
+      <div aria-hidden className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+        <img
+          src={brandArtwork}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover object-[88%_center] opacity-[0.14] saturate-[1.1] dark:opacity-[0.08]"
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-[var(--background-white)] via-[var(--background-white)]/70 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[var(--background-white)]/60 via-transparent to-[var(--background-white)]/40" />
+      </div>
+
       <TopNav />
       {!hideSidebar && <Sidebar />}
 
       <main
         className={cn(
-          "pt-16 transition-all duration-300 ease-in-out min-h-screen",
+          "relative z-[1] pt-16 transition-all duration-300 ease-in-out min-h-screen",
           sidebarWidthClass
         )}
       >

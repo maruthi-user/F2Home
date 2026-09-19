@@ -47,7 +47,24 @@ public class F2HomeSecurityConfiguration {
                         // forgot/reset) are public; the tokens they issue
                         // protect /api/f2home/** resources added later.
                         .requestMatchers("/api/f2home/auth/**").permitAll()
+                        // Product photos/videos are loaded by <img>/<video>
+                        // tags, which cannot send a Bearer token. Media ids
+                        // are random UUIDs (see ProductController#media).
+                        .requestMatchers(HttpMethod.GET, "/api/f2home/products/*/media/*").permitAll()
+                        // Listing management is farmer/admin only; checkout
+                        // and order history are customer only. Method-level
+                        // @PreAuthorize repeats this, but the URL rule runs
+                        // before request-body validation so a customer gets
+                        // 403 rather than a validation 400.
+                        .requestMatchers(HttpMethod.POST, "/api/f2home/products/**").hasAnyRole("FARMER", "ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/f2home/products/**").hasAnyRole("FARMER", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/f2home/products/**").hasAnyRole("FARMER", "ADMIN")
+                        .requestMatchers("/api/f2home/orders/**").hasRole("CUSTOMER")
                         .anyRequest().authenticated())
+                // Let controllers set Cache-Control themselves: product media
+                // is immutable and must be cacheable by the browser, which the
+                // default "no-cache, no-store" header writer would prevent.
+                .headers(headers -> headers.cacheControl(cache -> cache.disable()))
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .addFilterBefore(jwtAuthenticationFilter,

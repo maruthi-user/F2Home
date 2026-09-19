@@ -31,6 +31,11 @@ if (Capacitor.isNativePlatform()) {
 } else {
   BASE_URL = "https://api.f2home.com";
 }
+// Absolute API origin - used to build <img>/<video> src for product media,
+// which the browser fetches directly (no Authorization header; the media
+// endpoint is public by unguessable UUID).
+export const API_BASE_URL = BASE_URL;
+
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: BASE_URL,
   prepareHeaders: (headers, { getState, endpoint }) => {
