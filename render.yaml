@@ -1,0 +1,35 @@
+# Render Blueprint for the F2Home DEV environment (free plan).
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Creates one Docker web service built from backend/Dockerfile. Values marked
+# sync: false are entered once in the Render dashboard and never stored here.
+#
+# autoDeploy is off on purpose: deploys are triggered by
+# .github/workflows/dev-deploy.yml *after* Dev CI has passed, via the
+# service's Deploy Hook URL (stored as the RENDER_DEPLOY_HOOK_URL GitHub
+# secret). Pushing broken code therefore never reaches api-dev.f2home.com.
+
+services:
+  - type: web
+    name: f2home-backend-dev
+    runtime: docker
+    plan: free
+    region: singapore
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    autoDeploy: false
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: dev
+      # Neon connection string, e.g.
+      # jdbc:postgresql://<host>/F2Home?sslmode=require&prepareThreshold=0
+      - key: DB_URL
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      # openssl rand -base64 32  (must differ from local / prod)
+      - key: F2HOME_JWT_SECRET
+        sync: false

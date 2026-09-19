@@ -1,0 +1,119 @@
+name: Dev Deploy
+
+# DEV environment deployment (free tier, no servers to manage):
+#
+#   Dev CI passes on main
+#     -> frontend  : GitHub Pages            https://dev.f2home.com
+#     -> backend   : Render (Docker, free)   https://api-dev.f2home.com
+#     -> database  : Neon (Postgres, free)   connection string lives in Render
+#
+# This workflow never runs on a failed or cancelled Dev CI run, so broken
+# code cannot reach the dev URLs. Production is a separate workflow.
+#
+# One-time setup (outside this repo):
+#   GitHub  : Settings > Pages > Source = "GitHub Actions"; custom domain
+#             dev.f2home.com; tick "Enforce HTTPS" once the cert is issued.
+#   DNS     : dev      CNAME  maruthi-user.github.io
+#             api-dev  CNAME  <your-service>.onrender.com
+#   Render  : create the service from render.yaml (Blueprint), fill in the
+#             sync:false env vars, add custom domain api-dev.f2home.com, and
+#             copy Settings > Deploy Hook into the GitHub secret
+#             RENDER_DEPLOY_HOOK_URL.
+
+on:
+  workflow_run:
+    workflows: ["Dev CI"]
+    types: [completed]
+    branches: [main]
+  # Redeploy the current main by hand from the Actions tab.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dev-deploy
+  cancel-in-progress: false
+
+jobs:
+  frontend-pages:
+    name: Frontend -> GitHub Pages (dev.f2home.com)
+    # Manual runs always deploy; automatic runs only after a green Dev CI.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout (the commit Dev CI tested)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/f2home/package-lock.json
+
+      - name: Build
+        working-directory: frontend/f2home
+        run: |
+          npm ci
+          npm run build
+
+      - name: SPA fallback + no Jekyll
+        working-directory: frontend/f2home
+        run: |
+          # Pages serves unknown paths through 404.html; use the SPA entry so
+          # deep links (e.g. /app/welcome) survive a hard refresh.
+          cp build/index.html build/404.html
+          touch build/.nojekyll
+          # public/CNAME (dev.f2home.com) is copied into build/ by Vite.
+          test -f build/CNAME
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/f2home/build
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  backend-render:
+    name: Backend -> Render (api-dev.f2home.com)
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy hook
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::error::Secret RENDER_DEPLOY_HOOK_URL is not set (Render > service > Settings > Deploy Hook)."
+            exit 1
+          fi
+          # Render builds backend/Dockerfile from this commit on its side.
+          curl -fsS -X POST "${HOOK}&ref=${SHA}" -o /dev/null -w "Render responded HTTP %{http_code}\n"
+
+      - name: Wait for the new build to become healthy
+        run: |
+          # Render's free instance takes a few minutes to build a Java image.
+          for i in $(seq 1 40); do
+            if curl -fsS --max-time 20 https://api-dev.f2home.com/actuator/health | grep -q '"UP"'; then
+              echo "api-dev.f2home.com is UP"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::warning::Backend did not report UP within 10 minutes - check the Render dashboard."

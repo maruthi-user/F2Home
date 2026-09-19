@@ -113,10 +113,6 @@ public class F2HomeSecurityConfiguration {
                 "http://localhost:3001", "http://127.0.0.1:3001",
                 "http://localhost:5173", "http://127.0.0.1:5173",
                 "http://192.168.0.151:3001",
-                // GitHub Pages dev preview (maruthi-user.github.io/F2Home).
-                // The Pages site has no backend of its own, so while it is up
-                // it bridges to a backend running on the visitor's machine.
-                "https://maruthi-user.github.io", "http://maruthi-user.github.io",
                 "http://f2home.com", "https://f2home.com",
                 "http://www.f2home.com", "https://www.f2home.com",
                 "http://f2home.com:3001",

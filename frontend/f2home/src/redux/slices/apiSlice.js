@@ -10,7 +10,7 @@ const isSecure = window.location.protocol === "https:";
 //   local  -> f2home.com (via the hosts file) or localhost, served over
 //             http on the Vite dev port: the backend runs on :8081 on this
 //             machine.
-//   dev    -> dev.f2home.com  : api-dev.f2home.com
+//   dev    -> dev.f2home.com (GitHub Pages) : api-dev.f2home.com (Render)
 //   prod   -> f2home.com (https) : api.f2home.com
 //   native -> api.f2home.com
 const isLocalDevHost =
@@ -23,14 +23,6 @@ let BASE_URL;
 if (Capacitor.isNativePlatform()) {
   BASE_URL = "https://api.f2home.com";
 } else if (isLocalDevHost) {
-  BASE_URL = "http://localhost:8081";
-} else if (host.endsWith(".github.io")) {
-  // GitHub Pages dev preview - no backend is deployed there (Pages is static
-  // hosting only). The site calls a backend running on the visitor's own
-  // machine; Chrome/Edge allow an https page to talk to http://localhost.
-  // The backend must CORS-allow the *.github.io origin (see
-  // F2HomeSecurityConfiguration). Once the dev cloud instance exists, switch
-  // this to "https://api-dev.f2home.com".
   BASE_URL = "http://localhost:8081";
 } else if (host === "192.168.0.151") {
   BASE_URL = "http://192.168.0.151:8081";

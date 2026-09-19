@@ -10,7 +10,7 @@ F2Home — a farmer-to-customer marketplace. Farmers list produce, customers bro
 | Environment | Web | API |
 | --- | --- | --- |
 | local | `http://f2home.com` (add `127.0.0.1 f2home.com` to your hosts file) | `http://localhost:8081` |
-| dev | not hosted - Dev is GitHub Actions CI only (see [Development workflow](#development-workflow)) | not hosted |
+| dev | `https://dev.f2home.com` (GitHub Pages) | `https://api-dev.f2home.com` (Render free tier, DB on Neon) |
 | prod | `https://f2home.com` | `https://api.f2home.com` |
 
 The database name is `F2Home` in every environment — see
@@ -53,7 +53,10 @@ F2Home/
 │       ├── redux/                store, RTK Query apiSlice, auth + processing slices
 │       ├── context/              LayoutContext
 │       └── utils/                jwt, publicPaths, permissions, marketplaceDb (IndexedDB)
-└── .github/workflows/dev.yml     Dev CI: build + test + validate on GitHub Actions (no deploy)
+├── render.yaml                   Render Blueprint for the dev backend (free Docker service)
+└── .github/workflows/
+    ├── dev.yml                   Dev CI: build + test + validate (no deploy, no secrets)
+    └── dev-deploy.yml            Dev deploy, only after Dev CI passes: Pages + Render
 ```
 
 ## Getting started
@@ -89,17 +92,38 @@ Dev CI workflow uploads after a successful build.
 ## Development workflow
 
 ```text
-Local code -> GitHub -> GitHub Actions (Dev CI) -> build / test / validate
+Local code -> GitHub -> Dev CI (build / test / validate) -> Dev Deploy (free tier)
+                                                              ├─ frontend -> GitHub Pages  https://dev.f2home.com
+                                                              └─ backend  -> Render        https://api-dev.f2home.com
+                                                                              └─ Postgres on Neon
 ```
 
-`.github/workflows/dev.yml` runs on every push and pull request to `main`:
+**`dev.yml` - Dev CI** runs on every push and pull request to `main`:
 
 - **Frontend** - `npm ci`, `npm run lint` (non-blocking), `npm run build`; uploads `build/` as an artifact.
 - **Backend** - `./mvnw verify` (compile, unit tests, package); uploads the jar and the Surefire reports.
 
-It deploys nothing and needs no secrets. There is no hosted Dev environment;
-GitHub Actions is the Dev environment. Production deployment to a DigitalOcean
-Droplet will be a separate workflow, added once Dev testing is complete.
+It deploys nothing and needs no secrets.
+
+**`dev-deploy.yml` - Dev Deploy** runs only when Dev CI finishes **successfully** on `main`
+(or by hand from the Actions tab):
+
+- Builds the frontend and publishes it to GitHub Pages under the custom domain
+  `dev.f2home.com` (`frontend/f2home/public/CNAME`).
+- Calls the Render deploy hook (secret `RENDER_DEPLOY_HOOK_URL`); Render builds
+  `backend/Dockerfile` and serves it at `api-dev.f2home.com`. Runtime config
+  (`SPRING_PROFILES_ACTIVE=dev`, `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`,
+  `F2HOME_JWT_SECRET`) lives in the Render dashboard, never in git.
+
+Free-tier behaviour to know: the Render backend sleeps after 15 minutes idle
+and takes ~1 minute to wake (open `https://api-dev.f2home.com/actuator/health`
+before a demo); Neon suspends after 5 minutes idle and wakes in about a second.
+OTPs are not sent by SMS in dev - `LoggingSmsSender` writes them to the Render
+log - so seed a demo account with `backend/scripts/create-user.sql` or read the
+code from the log.
+
+Production (DigitalOcean Droplet) will be a separate workflow with its own
+secrets, added once Dev testing is complete.
 
 ## Where the data lives
 
