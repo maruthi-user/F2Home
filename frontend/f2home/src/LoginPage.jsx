@@ -77,6 +77,7 @@ export default function LoginPage() {
         fullName: loginRes.user?.fullName,
         phoneNumber: loginRes.user?.phoneNumber,
         email: loginRes.user?.email,
+        village: loginRes.user?.village,
         role: loginRes.user?.role,
         status: loginRes.user?.status,
       };
@@ -96,40 +97,53 @@ export default function LoginPage() {
     }
   };
 
+  // Frosted-glass field: the surface itself is translucent white + blur, so
+  // the input never falls back to a fully transparent background (which is
+  // what made the fields look invisible over the photo). `text-base` on
+  // phones stops iOS zooming the page when the keyboard opens.
   const inputClass = (invalid) =>
-    `w-full rounded-lg border bg-white py-2.5 pl-10 pr-4 text-sm text-gray-800 lg:py-3 outline-none transition placeholder:text-gray-400 focus:ring-2 ${
-      invalid
-        ? "border-red-400 focus:ring-red-200"
-        : "border-gray-200 focus:border-[#7cb342] focus:ring-[#7cb342]/25"
+    `w-full rounded-xl border border-black/10 bg-white/70 py-3 pl-10 pr-4 text-base text-gray-800 shadow-[inset_0_1px_2px_rgba(15,35,10,0.10)] backdrop-blur-md outline-none transition placeholder:text-gray-400 focus:border-[#7cb342] focus:bg-white/90 focus:shadow-none focus:ring-2 md:py-3 md:text-sm ${
+      invalid ? "border-red-400/80 bg-red-50/80 focus:ring-red-200" : "focus:ring-[#7cb342]/30"
     }`;
 
   return (
     // The brand artwork is the whole backdrop (logo, badges, tagline and the
     // farmer are all part of the image and stay fully visible on the left).
-    // The login card is a frosted panel on the right, vertically centred
+    // The login card is a frosted glass panel on the right, vertically centred
     // over the field - it never has to dodge the logo, so it looks the same
-    // on a 13" laptop and a 27" monitor. On phones it is simply centred.
+    // on a 13" laptop and a 27" monitor.
+    //
+    // Mobile: the artwork is blurred and dimmed behind the card (a busy crop
+    // under a translucent panel is unreadable), so the glass reads as glass
+    // and the fields stay obviously tappable.
     <div className="fixed inset-0 z-[50] overflow-y-auto bg-[#f3f8ee]">
       <img
         src={loginHeroImage}
         alt=""
         aria-hidden
-        className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover object-[30%_center] md:object-[left_center]"
+        className="pointer-events-none absolute inset-0 h-full w-full scale-105 select-none object-cover object-[35%_center] blur-[6px] md:scale-100 md:object-[left_center] md:blur-none"
       />
-      {/* Slight darkening on the right so the white card reads against the
-          bright sky/field no matter the crop. */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-l from-black/25 via-transparent to-transparent md:from-black/20" />
+      {/* Mobile: flat scrim so the glass card and its fields separate from the
+          photo. Desktop: slight darkening on the right so the white card reads
+          against the bright sky/field no matter the crop. */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 bg-black/35 md:hidden" />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 hidden bg-gradient-to-l from-black/25 via-transparent to-transparent md:block md:from-black/20"
+      />
 
-      <div className="relative flex min-h-full flex-col items-center justify-center px-4 py-6 md:items-end md:px-[6vw] lg:px-[7vw]">
-        <div className="w-full max-w-[400px] rounded-2xl bg-white/[0.93] p-5 shadow-[0_24px_70px_-20px_rgba(20,40,15,0.6)] ring-1 ring-white/60 backdrop-blur-md sm:p-6 lg:max-w-[440px] lg:p-7">
-          <h1 className="text-xl font-bold text-[#1f2a1f] lg:text-2xl">Welcome Back</h1>
-          <p className="mt-0.5 text-xs text-gray-500 lg:text-sm">Login to your f2home account</p>
+      <div className="relative flex min-h-full flex-col items-center justify-center px-4 py-8 md:items-end md:px-[6vw] md:py-6 lg:px-[7vw]">
+        <div className="relative w-full max-w-[420px] rounded-[28px] ">
+            <div>
+              <h1 className="text-xl font-bold text-[#16210f] lg:text-2xl">Welcome Back</h1>
+              <p className="mt-0.5 text-xs text-gray-600 lg:text-sm">Login to your f2home account</p>
+            </div>
 
           <form
             onSubmit={handleSubmit((data) => runWithProcessingLock(() => onSubmit(data), "Signing in…"))}
             className="mt-4 space-y-3"
           >
-            <PhoneField register={register} name="phoneNumber" error={errors.phoneNumber} placeholder="Mobile number" />
+            <PhoneField register={register} name="phoneNumber" error={errors.phoneNumber} placeholder="Mobile number" variant="glass" />
 
             <div>
               <div className="relative">

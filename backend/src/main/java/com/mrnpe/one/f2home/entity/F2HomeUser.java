@@ -44,6 +44,19 @@ public class F2HomeUser {
     @Column(name = "full_name", nullable = false)
     private String fullName;
 
+    @Column(name = "village", length = 120)
+    private String village;
+
+    // Self-taken registration photo (bytea, like product media).
+    @Column(name = "photo_content_type", length = 100)
+    private String photoContentType;
+
+    @Column(name = "photo_bytes")
+    private byte[] photoBytes;
+
+    @Column(name = "photo_size_bytes")
+    private Long photoSizeBytes;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
@@ -87,6 +100,18 @@ public class F2HomeUser {
 
     public String getFullName() { return fullName; }
     public void setFullName(String fullName) { this.fullName = fullName; }
+
+    public String getVillage() { return village; }
+    public void setVillage(String village) { this.village = village; }
+
+    public String getPhotoContentType() { return photoContentType; }
+    public void setPhotoContentType(String photoContentType) { this.photoContentType = photoContentType; }
+
+    public byte[] getPhotoBytes() { return photoBytes; }
+    public void setPhotoBytes(byte[] photoBytes) { this.photoBytes = photoBytes; }
+
+    public Long getPhotoSizeBytes() { return photoSizeBytes; }
+    public void setPhotoSizeBytes(Long photoSizeBytes) { this.photoSizeBytes = photoSizeBytes; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

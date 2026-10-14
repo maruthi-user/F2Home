@@ -12,6 +12,7 @@ public record UserResponse(
         String phoneNumber,
         String email,
         String fullName,
+        String village,
         F2HomeRole role,
         F2HomeUserStatus status,
         boolean phoneVerified
@@ -22,6 +23,7 @@ public record UserResponse(
                 user.getPhoneNumber(),
                 user.getEmail(),
                 user.getFullName(),
+                user.getVillage(),
                 user.getRole(),
                 user.getStatus(),
                 user.isPhoneVerified());

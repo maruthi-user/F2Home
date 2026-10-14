@@ -6,9 +6,12 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.nio.charset.StandardCharsets;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,7 +20,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import com.mrnpe.one.exception.GlobalExceptionHandler;
@@ -51,74 +56,104 @@ class F2HomeAuthControllerTest {
                 .build();
     }
 
+    /**
+     * Step 1 of registration is multipart: a JSON "registration" part plus
+     * the "photo" the user just took with their camera.
+     */
+    private static MockMultipartHttpServletRequestBuilder registrationOtpRequest(String registrationJson) {
+        MockMultipartFile registration = new MockMultipartFile(
+                "registration", "registration.json", "application/json",
+                registrationJson.getBytes(StandardCharsets.UTF_8));
+        MockMultipartFile photo = new MockMultipartFile(
+                "photo", "selfie.jpg", "image/jpeg", jpegBytes());
+        // The multipart builder already sets the multipart/form-data content type.
+        return multipart("/api/f2home/auth/register/request-otp")
+                .file(registration)
+                .file(photo);
+    }
+
+    private static byte[] jpegBytes() {
+        byte[] bytes = new byte[16];
+        bytes[0] = (byte) 0xFF;
+        bytes[1] = (byte) 0xD8;
+        bytes[2] = (byte) 0xFF;
+        bytes[3] = (byte) 0xE0;
+        return bytes;
+    }
+
     @Test
     void requestRegistrationOtpReturnsMessage() throws Exception {
-        mockMvc.perform(post("/api/f2home/auth/register/request-otp")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"phoneNumber":"+919876543210","role":"FARMER"}
-                                """))
+        mockMvc.perform(registrationOtpRequest("""
+                {"phoneNumber":"+919876543210","fullName":"Farmer Joe",
+                 "village":"Rampur","role":"FARMER"}
+                """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").exists());
 
         verify(authService).requestRegistrationOtp(eq("+919876543210"),
-                eq(F2HomeRole.FARMER), anyString());
+                eq("Farmer Joe"), eq("Rampur"), eq(F2HomeRole.FARMER), any(), anyString());
     }
 
     @Test
     void requestRegistrationOtpAcceptsCaseInsensitiveRole() throws Exception {
         // Swagger/manual clients may type "Farmer"; the enum factory
         // normalizes it to FARMER instead of failing deserialization.
-        mockMvc.perform(post("/api/f2home/auth/register/request-otp")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"phoneNumber":"+919876543210","role":"Farmer"}
-                                """))
+        mockMvc.perform(registrationOtpRequest("""
+                {"phoneNumber":"+919876543210","fullName":"Farmer Joe",
+                 "village":"Rampur","role":"Farmer"}
+                """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").exists());
 
         verify(authService).requestRegistrationOtp(eq("+919876543210"),
-                eq(F2HomeRole.FARMER), anyString());
+                eq("Farmer Joe"), eq("Rampur"), eq(F2HomeRole.FARMER), any(), anyString());
     }
 
     @Test
     void requestRegistrationOtpRejectsUnknownRoleWithHelpfulMessage() throws Exception {
-        mockMvc.perform(post("/api/f2home/auth/register/request-otp")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"phoneNumber":"+919876543210","role":"NotARole"}
-                                """))
+        mockMvc.perform(registrationOtpRequest("""
+                {"phoneNumber":"+919876543210","fullName":"Farmer Joe",
+                 "village":"Rampur","role":"NotARole"}
+                """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(
-                        "Invalid role 'NotARole'. Valid roles: CUSTOMER, FARMER, DELIVERY_PARTNER, ADMIN"));
+                        "Invalid role 'NotARole'. Valid roles: CUSTOMER, FARMER, ADMIN"));
+    }
+
+    @Test
+    void requestRegistrationOtpRejectsMissingVillage() throws Exception {
+        mockMvc.perform(registrationOtpRequest("""
+                {"phoneNumber":"+919876543210","fullName":"Farmer Joe","role":"FARMER"}
+                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("village Village is required"));
     }
 
     @Test
     void requestRegistrationOtpIsRateLimited() throws Exception {
         doThrow(new RateLimitException("Too many OTP requests."))
-                .when(authService).requestRegistrationOtp(anyString(), any(), anyString());
+                .when(authService).requestRegistrationOtp(anyString(), anyString(), anyString(), any(), any(), anyString());
 
-        mockMvc.perform(post("/api/f2home/auth/register/request-otp")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"phoneNumber":"+919876543210","role":"FARMER"}
-                                """))
+        mockMvc.perform(registrationOtpRequest("""
+                {"phoneNumber":"+919876543210","fullName":"Farmer Joe",
+                 "village":"Rampur","role":"FARMER"}
+                """))
                 .andExpect(status().isTooManyRequests())
                 .andExpect(jsonPath("$.message").value("Too many OTP requests."));
     }
 
     @Test
     void registerVerifyOtpReturnsAuthResponse() throws Exception {
-        when(authService.register(anyString(), anyString(), anyString(), any(), anyString(), any()))
+        when(authService.register(anyString(), anyString(), any(), anyString()))
                 .thenReturn(new AuthResponse("access", 900000L, "refresh",
-                        new UserResponse(1L, "+919876543210", null, "Farmer Joe",
+                        new UserResponse(1L, "+919876543210", null, "Farmer Joe", "Rampur",
                                 F2HomeRole.FARMER, F2HomeUserStatus.ACTIVE, true)));
 
         mockMvc.perform(post("/api/f2home/auth/register/verify-otp")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"phoneNumber":"+919876543210","otp":"123456","fullName":"Farmer Joe",
-                                 "email":"joe@example.com","password":"Secret@123","role":"FARMER"}
+                                {"phoneNumber":"+919876543210","otp":"123456",
+                                 "email":"joe@example.com","password":"Secret@123"}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").value("access"))
@@ -130,7 +165,7 @@ class F2HomeAuthControllerTest {
     void loginReturnsAuthResponse() throws Exception {
         when(authService.login(anyString(), anyString()))
                 .thenReturn(new AuthResponse("access", 900000L, "refresh",
-                        new UserResponse(1L, "+919876543210", null, "Customer",
+                        new UserResponse(1L, "+919876543210", null, "Customer", "City",
                                 F2HomeRole.CUSTOMER, F2HomeUserStatus.ACTIVE, true)));
 
         mockMvc.perform(post("/api/f2home/auth/login")
@@ -156,7 +191,7 @@ class F2HomeAuthControllerTest {
     void refreshReturnsRotatedPair() throws Exception {
         when(authService.refresh(anyString()))
                 .thenReturn(new AuthResponse("new-access", 900000L, "new-refresh",
-                        new UserResponse(1L, "+919876543210", null, "Customer",
+                        new UserResponse(1L, "+919876543210", null, "Customer", "City",
                                 F2HomeRole.CUSTOMER, F2HomeUserStatus.ACTIVE, true)));
 
         mockMvc.perform(post("/api/f2home/auth/refresh")

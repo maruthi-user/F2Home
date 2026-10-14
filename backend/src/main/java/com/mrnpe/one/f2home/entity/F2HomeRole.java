@@ -7,16 +7,18 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 /**
  * F2HOME platform roles. Kept fully separate from the (removed) legacy role
  * enum so the two domains can never collide.
+ *
+ * DELIVERY_PARTNER was removed permanently: self-registration only offers
+ * CUSTOMER and FARMER, and ADMIN cannot self-register.
  */
 public enum F2HomeRole {
     CUSTOMER,
     FARMER,
-    DELIVERY_PARTNER,
     ADMIN;
 
     /**
      * Case-insensitive deserialization so API clients (Swagger tryouts,
-     * mobile apps) can send "Farmer", "farmer", "Delivery Partner", etc.
+     * mobile apps) can send "Farmer", "farmer", "Customer", etc.
      * The frontend always sends the exact uppercase names, which still map
      * fine. Throws IllegalArgumentException with the valid values so the
      * global handler can return a useful 400 instead of a generic
@@ -37,6 +39,6 @@ public enum F2HomeRole {
             }
         }
         throw new IllegalArgumentException("Invalid role '" + value
-                + "'. Valid roles: CUSTOMER, FARMER, DELIVERY_PARTNER, ADMIN");
+                + "'. Valid roles: CUSTOMER, FARMER, ADMIN");
     }
 }

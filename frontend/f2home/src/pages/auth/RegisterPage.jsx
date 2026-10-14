@@ -10,31 +10,28 @@ import {
   EyeOff,
   KeyRound,
   Mail,
+  MapPin,
   Sprout,
-  Truck,
   User,
   ShoppingBasket,
 } from "lucide-react";
 import AuthLayout from "./AuthLayout";
 import SuccessScreen from "./SuccessScreen";
 import {
+  buildRegisterFormData,
   useRequestRegisterOtpMutation,
   useVerifyRegisterOtpMutation,
 } from "../../redux/f2home/authApi";
 import { setTokenData, setUserData } from "@/redux/slices/authSlice";
 import { useDispatch } from "react-redux";
-import { useNavigate } from "react-router-dom";
 import { runWithProcessingLock } from "@/utils/processingLock";
 import PhoneField from "@/components/common/PhoneField";
+import CapturePhotoField from "@/components/common/CapturePhotoField";
 import { toE164 } from "@/utils/phone";
 
+// Self-registration offers exactly two account types. (The DELIVERY_PARTNER
+// option was removed permanently.)
 const ROLES = [
-  {
-    value: "CUSTOMER",
-    label: "Customer",
-    description: "Buy fresh produce directly from farmers",
-    icon: ShoppingBasket,
-  },
   {
     value: "FARMER",
     label: "Farmer",
@@ -42,10 +39,10 @@ const ROLES = [
     icon: Sprout,
   },
   {
-    value: "DELIVERY_PARTNER",
-    label: "Delivery Partner",
-    description: "Deliver orders from farms to homes",
-    icon: Truck,
+    value: "CUSTOMER",
+    label: "Customer",
+    description: "Buy fresh produce directly from farmers",
+    icon: ShoppingBasket,
   },
 ];
 
@@ -78,7 +75,6 @@ const STEP_STYLES = "w-9 h-9 rounded-full flex items-center justify-center text-
 
 const RegisterPage = () => {
   const dispatch = useDispatch();
-  const navigate = useNavigate();
 
   const [step, setStep] = useState(1);
   const [registration, setRegistration] = useState(null);
@@ -95,36 +91,49 @@ const RegisterPage = () => {
     register,
     handleSubmit,
     watch,
+    setValue,
     getValues,
     formState: { errors },
   } = useForm({
     mode: "onTouched",
     defaultValues: {
       phoneNumber: "",
-      role: "",
-      otp: "",
       fullName: "",
+      village: "",
+      role: "",
+      photo: null,
+      otp: "",
       email: "",
       password: "",
     },
   });
 
+  register("photo", { required: "A photo of yourself is required" });
+
   const password = watch("password") || "";
+  const selectedRole = watch("role");
   const requirementChecks = PASSWORD_RULES.map((rule) => ({
     ...rule,
     passed: rule.test(password),
   }));
   const allRequirementsMet = requirementChecks.every((rule) => rule.passed);
 
-  // Step 1: phone + role -> request an OTP.
+  const setPhoto = (file) =>
+    setValue("photo", file, { shouldValidate: true, shouldDirty: true });
+
+  // Step 1: profile + photo -> park it server-side and request an OTP.
   const onRequestOtp = async (data) => {
     setApiError("");
     try {
       const phoneNumber = toE164(data.phoneNumber);
-      const res = await requestRegisterOtp({
+      const formData = buildRegisterFormData({
         phoneNumber,
+        fullName: data.fullName.trim(),
+        village: data.village.trim(),
         role: data.role,
-      }).unwrap();
+        photo: data.photo,
+      });
+      const res = await requestRegisterOtp(formData).unwrap();
       setRegistration({
         phoneNumber,
         role: data.role,
@@ -136,17 +145,15 @@ const RegisterPage = () => {
     }
   };
 
-  // Step 2: OTP + profile -> create the account (auto-login).
+  // Step 2: OTP + password -> create the account (auto-login).
   const onVerifyAndCreate = async (data) => {
     setApiError("");
     try {
       const res = await verifyRegisterOtp({
         phoneNumber: registration.phoneNumber,
         otp: data.otp,
-        fullName: data.fullName,
         email: data.email || undefined,
         password: data.password,
-        role: registration.role,
       }).unwrap();
 
       dispatch(
@@ -161,6 +168,7 @@ const RegisterPage = () => {
           fullName: res.user?.fullName,
           phoneNumber: res.user?.phoneNumber,
           email: res.user?.email,
+          village: res.user?.village,
           role: res.user?.role,
           status: res.user?.status,
         })
@@ -192,8 +200,6 @@ const RegisterPage = () => {
     );
   }
 
-  const selectedRole = ROLES.find((r) => r.value === getValues("role"));
-
   return (
     <AuthLayout>
       <h1 className="text-center text-4xl font-bold text-[#3c3c3c] mb-2">
@@ -217,7 +223,7 @@ const RegisterPage = () => {
               {s}
             </div>
             <span className={`text-sm ${step >= s ? "text-[#33691e] font-medium" : "text-gray-400"}`}>
-              {s === 1 ? "Phone & Role" : "Verify OTP"}
+              {s === 1 ? "Your details" : "Verify OTP"}
             </span>
             {s === 1 && <ArrowRight className="h-4 w-4 text-gray-400" />}
           </div>
@@ -228,35 +234,105 @@ const RegisterPage = () => {
         <form onSubmit={handleSubmit((data) => runWithProcessingLock(() => onRequestOtp(data), "Sending OTP…"))} className="space-y-5">
           <PhoneField register={register} name="phoneNumber" error={errors.phoneNumber} variant="pill" />
 
-          <div className="space-y-2">
-            {ROLES.map(({ value, label, description, icon: Icon }) => (
-              <label
-                key={value}
-                className={`flex items-center gap-3 rounded-2xl border px-4 py-3 cursor-pointer transition ${
-                  watch("role") === value
-                    ? "border-[#7cb342] bg-[#f2f8ea]"
-                    : "border-gray-200 bg-white hover:border-[#c5e1a5]"
+          <div>
+            <div className="relative">
+              <User className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
+              <input
+                type="text"
+                placeholder="Full Name"
+                autoComplete="name"
+                {...register("fullName", {
+                  required: "Full name is required",
+                  maxLength: { value: 255, message: "Full name is too long" },
+                })}
+                className={`w-full rounded-full bg-[#ebebeb] pl-14 pr-5 py-4 text-gray-700 outline-none border ${
+                  errors.fullName
+                    ? "border-red-500"
+                    : "border-transparent focus:border-[#7cb342]"
                 }`}
-              >
-                <input type="radio" value={value} className="sr-only" {...register("role", { required: "Please choose a role" })} />
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f2f8ea] text-[#33691e]">
-                  <Icon className="h-5 w-5" />
-                </span>
-                <span className="flex-1">
-                  <span className="block text-sm font-semibold text-[#3c3c3c]">{label}</span>
-                  <span className="block text-xs text-gray-500">{description}</span>
-                </span>
-                <span
-                  className={`h-4 w-4 rounded-full border-2 ${
-                    watch("role") === value ? "border-[#33691e] bg-[#8bc34a]" : "border-gray-300"
+              />
+            </div>
+            {errors.fullName && (
+              <p className="mt-2 text-sm text-red-500 ml-3">{errors.fullName.message}</p>
+            )}
+          </div>
+
+          <div>
+            <div className="relative">
+              <MapPin className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
+              <input
+                type="text"
+                placeholder="Village"
+                autoComplete="address-level3"
+                {...register("village", {
+                  required: "Village is required",
+                  maxLength: { value: 120, message: "Village name is too long" },
+                })}
+                className={`w-full rounded-full bg-[#ebebeb] pl-14 pr-5 py-4 text-gray-700 outline-none border ${
+                  errors.village
+                    ? "border-red-500"
+                    : "border-transparent focus:border-[#7cb342]"
+                }`}
+              />
+            </div>
+            {errors.village && (
+              <p className="mt-2 text-sm text-red-500 ml-3">{errors.village.message}</p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            {ROLES.map((role) => {
+              const Icon = role.icon;
+              return (
+                <label
+                  key={role.value}
+                  className={`flex items-center gap-3 rounded-2xl border px-4 py-3 cursor-pointer transition ${
+                    selectedRole === role.value
+                      ? "border-[#7cb342] bg-[#f2f8ea]"
+                      : "border-gray-200 bg-white hover:border-[#c5e1a5]"
                   }`}
-                />
-              </label>
-            ))}
+                >
+                  <input type="radio" value={role.value} className="sr-only" {...register("role", { required: "Please choose a role" })} />
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f2f8ea] text-[#33691e]">
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <span className="flex-1">
+                    <span className="block text-sm font-semibold text-[#3c3c3c]">{role.label}</span>
+                    <span className="block text-xs text-gray-500">{role.description}</span>
+                  </span>
+                  <span
+                    className={`h-4 w-4 rounded-full border-2 ${
+                      selectedRole === role.value ? "border-[#33691e] bg-[#8bc34a]" : "border-gray-300"
+                    }`}
+                  />
+                </label>
+              );
+            })}
             {errors.role && (
               <p className="text-sm text-red-500 ml-3">{errors.role.message}</p>
             )}
           </div>
+
+          {/* Photo step: appears once an account type is chosen. The picture
+              is always taken by the camera (auto-shutter on phones); desktop
+              Chrome/Edge may upload a file instead. */}
+          {selectedRole && (
+            <div className="space-y-2 rounded-2xl border border-gray-200 bg-white p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold text-[#3c3c3c]">Your photo</p>
+                  <p className="text-xs text-gray-500">
+                    Required for your {ROLES.find((r) => r.value === selectedRole)?.label} account
+                  </p>
+                </div>
+              </div>
+              <CapturePhotoField
+                value={watch("photo")}
+                onChange={setPhoto}
+                error={errors.photo}
+              />
+            </div>
+          )}
 
           {apiError && (
             <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3.5 text-sm text-red-600">
@@ -284,9 +360,13 @@ const RegisterPage = () => {
         <form onSubmit={handleSubmit((data) => runWithProcessingLock(() => onVerifyAndCreate(data), "Creating your account…"))} className="space-y-5">
           <p className="text-center text-sm text-gray-500">
             We sent a 6-digit OTP to <span className="font-semibold text-[#3c3c3c]">{registration?.phoneNumber}</span>
-            {selectedRole ? (
+            {registration?.role ? (
               <>
-                {" "}for your <span className="font-semibold text-[#3c3c3c]">{selectedRole.label}</span> account
+                {" "}for your{" "}
+                <span className="font-semibold text-[#3c3c3c]">
+                  {ROLES.find((r) => r.value === registration.role)?.label}
+                </span>{" "}
+                account
               </>
             ) : null}
             . It is valid for 10 minutes.
@@ -316,29 +396,6 @@ const RegisterPage = () => {
             </div>
             {errors.otp && (
               <p className="mt-2 text-sm text-red-500 ml-3">{errors.otp.message}</p>
-            )}
-          </div>
-
-          <div>
-            <div className="relative">
-              <User className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" />
-              <input
-                type="text"
-                placeholder="Full Name"
-                autoComplete="name"
-                {...register("fullName", {
-                  required: "Full name is required",
-                  maxLength: { value: 255, message: "Full name is too long" },
-                })}
-                className={`w-full rounded-full bg-[#ebebeb] pl-14 pr-5 py-4 text-gray-700 outline-none border ${
-                  errors.fullName
-                    ? "border-red-500"
-                    : "border-transparent focus:border-[#7cb342]"
-                }`}
-              />
-            </div>
-            {errors.fullName && (
-              <p className="mt-2 text-sm text-red-500 ml-3">{errors.fullName.message}</p>
             )}
           </div>
 
@@ -443,7 +500,7 @@ const RegisterPage = () => {
               className="inline-flex items-center gap-2 text-sm hover:underline"
             >
               <ArrowLeft className="h-4 w-4" />
-              Change phone number or role
+              Change phone number, details or photo
             </button>
           </div>
         </form>

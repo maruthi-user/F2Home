@@ -6,8 +6,7 @@ import { ROLE_PERMISSIONS } from "@/utils/rolePermissionMap";
 import { hasPermission } from "@/utils/permissions";
 
 // Post-login landing. Marketplace/My Farm are live; Deliveries/Insights stay
-// "Coming soon" - Delivery Partner flows and analytics aren't part of this
-// phase.
+// "Coming soon" - delivery runs and analytics aren't part of this phase.
 const CARDS = [
   {
     icon: ShoppingBasket,

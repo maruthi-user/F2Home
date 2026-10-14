@@ -1,10 +1,13 @@
 package com.mrnpe.one.f2home.controller;
 
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.mrnpe.one.f2home.dto.AuthResponse;
 import com.mrnpe.one.f2home.dto.ForgotPasswordRequest;
@@ -31,12 +34,22 @@ public class F2HomeAuthController {
     }
 
     // ================= REGISTRATION: STEP 1 — REQUEST OTP =================
-    @PostMapping("/register/request-otp")
+    //
+    // multipart/form-data: "registration" (JSON: phone, name, village, role)
+    // plus "photo" - the picture the user just took with the camera. The
+    // payload is parked server-side until the OTP below is verified.
+    @PostMapping(value = "/register/request-otp", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<MessageResponse> requestRegistrationOtp(
-            @RequestBody @Valid RegisterOtpRequest request,
+            @RequestPart("registration") @Valid RegisterOtpRequest request,
+            @RequestPart("photo") MultipartFile photo,
             HttpServletRequest httpRequest) {
         authService.requestRegistrationOtp(
-                request.phoneNumber(), request.role(), resolveClientIp(httpRequest));
+                request.phoneNumber(),
+                request.fullName(),
+                request.village(),
+                request.role(),
+                photo,
+                resolveClientIp(httpRequest));
         return ResponseEntity.ok(new MessageResponse(
                 "OTP sent to " + request.phoneNumber() + ". It is valid for 10 minutes."));
     }
@@ -47,10 +60,8 @@ public class F2HomeAuthController {
         AuthResponse response = authService.register(
                 request.phoneNumber(),
                 request.otp(),
-                request.fullName(),
                 request.email(),
-                request.password(),
-                request.role());
+                request.password());
         return ResponseEntity.ok(response);
     }
 

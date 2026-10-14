@@ -1,15 +1,32 @@
 import { apiSlice } from "../slices/apiSlice";
 
+// Registration step 1 body: multipart "registration" (JSON: phone, name,
+// village, role) plus "photo" - the picture the user just took. The backend
+// parks it as a draft until the OTP is verified.
+export function buildRegisterFormData({ phoneNumber, fullName, village, role, photo }) {
+  const form = new FormData();
+  form.append(
+    "registration",
+    new Blob([JSON.stringify({ phoneNumber, fullName, village, role })], {
+      type: "application/json",
+    }),
+    "registration.json"
+  );
+  form.append("photo", photo, photo.name || "photo.jpg");
+  return form;
+}
+
 // F2HOME auth endpoints. All URLs hit the backend's dedicated
 // /api/f2home/auth/** security chain.
 export const f2HomeAuthApi = apiSlice.injectEndpoints({
   endpoints: (builder) => ({
-    // Registration step 1: request an OTP for the given phone number + role.
+    // Registration step 1: park the profile + photo and send the OTP.
+    // Accepts the FormData built by buildRegisterFormData().
     requestRegisterOtp: builder.mutation({
-      query: (data) => ({
+      query: (formData) => ({
         url: "/api/f2home/auth/register/request-otp",
         method: "POST",
-        body: data,
+        body: formData,
       }),
     }),
     // Registration step 2: verify OTP + create the account. Returns the

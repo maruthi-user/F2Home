@@ -1,15 +1,13 @@
 package com.mrnpe.one.f2home.dto;
 
-import com.mrnpe.one.f2home.entity.F2HomeRole;
-
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.Size;
 
 /**
- * Step 2 of registration: verify the OTP and create the account.
+ * Step 2 of registration: verify the OTP and create the account. Name,
+ * village, role and the photo come from the registration draft created in
+ * step 1, so they are not part of this payload.
  */
 public record RegisterVerifyRequest(
 
@@ -21,10 +19,6 @@ public record RegisterVerifyRequest(
         @Pattern(regexp = "^\\d{6}$", message = "OTP must be a 6-digit code")
         String otp,
 
-        @NotBlank(message = "Full name is required")
-        @Size(max = 255, message = "Full name must not exceed 255 characters")
-        String fullName,
-
         @Email(message = "Email must be a valid email address")
         String email,
 
@@ -33,9 +27,6 @@ public record RegisterVerifyRequest(
                 regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{8,255}$",
                 message = "Password must be at least 8 characters and contain an uppercase letter, a lowercase letter, a number and a special character"
         )
-        String password,
-
-        @NotNull(message = "Role is required")
-        F2HomeRole role
+        String password
 ) {
 }

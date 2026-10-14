@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -19,14 +18,18 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.mrnpe.one.exception.BadRequestException;
 import com.mrnpe.one.f2home.dto.AuthResponse;
+import com.mrnpe.one.f2home.entity.F2HomeRegistrationDraft;
 import com.mrnpe.one.f2home.entity.F2HomeRole;
 import com.mrnpe.one.f2home.entity.F2HomeUser;
 import com.mrnpe.one.f2home.entity.F2HomeUserStatus;
 import com.mrnpe.one.f2home.entity.RefreshToken;
+import com.mrnpe.one.f2home.repository.F2HomeRegistrationDraftRepository;
 import com.mrnpe.one.f2home.repository.F2HomeUserRepository;
 import com.mrnpe.one.f2home.repository.RefreshTokenRepository;
 import com.mrnpe.one.f2home.security.F2HomeJwtService;
@@ -35,11 +38,14 @@ import com.mrnpe.one.f2home.security.F2HomeJwtService;
 class F2HomeAuthServiceTest {
 
     private static final String PHONE = "+919876543210";
+    private static final byte[] JPEG_BYTES = jpegBytes();
 
     @Mock
     private F2HomeUserRepository userRepository;
     @Mock
     private RefreshTokenRepository refreshTokenRepository;
+    @Mock
+    private F2HomeRegistrationDraftRepository draftRepository;
     @Mock
     private OtpService otpService;
     @Mock
@@ -54,7 +60,7 @@ class F2HomeAuthServiceTest {
     @BeforeEach
     void setUp() {
         authService = new F2HomeAuthService(userRepository, refreshTokenRepository,
-                otpService, rateLimiter, jwtService, passwordEncoder);
+                draftRepository, otpService, rateLimiter, jwtService, passwordEncoder);
         lenient().when(userRepository.save(any(F2HomeUser.class)))
                 .thenAnswer(inv -> {
                     F2HomeUser u = inv.getArgument(0);
@@ -65,32 +71,95 @@ class F2HomeAuthServiceTest {
                 .thenAnswer(inv -> inv.getArgument(0));
     }
 
+    private static MultipartFile photo() {
+        return new MockMultipartFile("photo", "selfie.jpg", "image/jpeg", JPEG_BYTES);
+    }
+
+    private static byte[] jpegBytes() {
+        byte[] bytes = new byte[16];
+        bytes[0] = (byte) 0xFF;
+        bytes[1] = (byte) 0xD8;
+        bytes[2] = (byte) 0xFF;
+        bytes[3] = (byte) 0xE0;
+        return bytes;
+    }
+
     @Test
-    void registerRejectsAdminSelfRegistration() {
-        assertThatCode(() -> authService.requestRegistrationOtp(PHONE, F2HomeRole.ADMIN, "ip"))
+    void requestRegistrationOtpRejectsAdminSelfRegistration() {
+        assertThatCode(() -> authService.requestRegistrationOtp(
+                PHONE, "Admin Joe", "Rampur", F2HomeRole.ADMIN, photo(), "ip"))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("cannot self-register");
+    }
+
+    @Test
+    void requestRegistrationOtpRejectsMissingPhoto() {
+        assertThatCode(() -> authService.requestRegistrationOtp(
+                PHONE, "Farmer Joe", "Rampur", F2HomeRole.FARMER, null, "ip"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("photo is required");
+    }
+
+    @Test
+    void requestRegistrationOtpRejectsNonImageUpload() {
+        MultipartFile text = new MockMultipartFile("photo", "note.txt", "text/plain", new byte[] {1, 2, 3});
+
+        assertThatCode(() -> authService.requestRegistrationOtp(
+                PHONE, "Farmer Joe", "Rampur", F2HomeRole.FARMER, text, "ip"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("JPEG, PNG or WEBP");
+    }
+
+    @Test
+    void requestRegistrationOtpParksProfileAndPhotoInDraftThenSendsOtp() {
+        when(userRepository.existsByPhoneNumber(PHONE)).thenReturn(false);
+
+        authService.requestRegistrationOtp(
+                PHONE, "  Farmer Joe ", " Rampur ", F2HomeRole.FARMER, photo(), "1.2.3.4");
+
+        ArgumentCaptor<F2HomeRegistrationDraft> captor =
+                ArgumentCaptor.forClass(F2HomeRegistrationDraft.class);
+        verify(draftRepository).save(captor.capture());
+        F2HomeRegistrationDraft draft = captor.getValue();
+        assertThat(draft.getPhoneNumber()).isEqualTo(PHONE);
+        assertThat(draft.getFullName()).isEqualTo("Farmer Joe");
+        assertThat(draft.getVillage()).isEqualTo("Rampur");
+        assertThat(draft.getRole()).isEqualTo(F2HomeRole.FARMER);
+        assertThat(draft.getPhotoContentType()).isEqualTo("image/jpeg");
+        assertThat(draft.getPhotoBytes()).isEqualTo(JPEG_BYTES);
+        assertThat(draft.getPhotoSizeBytes()).isEqualTo(JPEG_BYTES.length);
+
+        verify(otpService).generateAndSendOtp(PHONE, com.mrnpe.one.f2home.entity.OtpPurpose.REGISTRATION);
     }
 
     @Test
     void registerRejectsDuplicatePhoneNumber() {
         when(userRepository.existsByPhoneNumber(PHONE)).thenReturn(true);
 
-        assertThatCode(() -> authService.register(PHONE, "123456", "Farmer Joe",
-                null, "Secret@123", F2HomeRole.FARMER))
+        assertThatCode(() -> authService.register(PHONE, "123456", null, "Secret@123"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("already exists");
     }
 
     @Test
+    void registerFailsWhenTheStepOneDraftIsMissing() {
+        when(userRepository.existsByPhoneNumber(PHONE)).thenReturn(false);
+        when(draftRepository.findByPhoneNumber(PHONE)).thenReturn(Optional.empty());
+
+        assertThatCode(() -> authService.register(PHONE, "123456", null, "Secret@123"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("expired");
+    }
+
+    @Test
     void registerVerifiesOtpCreatesActiveUserAndIssuesTokenPair() {
         when(userRepository.existsByPhoneNumber(PHONE)).thenReturn(false);
+        when(draftRepository.findByPhoneNumber(PHONE)).thenReturn(Optional.of(draft()));
         when(passwordEncoder.encode("Secret@123")).thenReturn("bcrypt-hash");
         when(jwtService.generateToken(any(F2HomeUser.class))).thenReturn("access-token");
         when(jwtService.getExpirationTime()).thenReturn(900000L);
 
-        AuthResponse response = authService.register(PHONE, "123456", "Farmer Joe",
-                "joe@example.com", "Secret@123", F2HomeRole.FARMER);
+        AuthResponse response = authService.register(PHONE, "123456", "joe@example.com", "Secret@123");
 
         verify(otpService).verifyOtp(PHONE, com.mrnpe.one.f2home.entity.OtpPurpose.REGISTRATION, "123456");
         ArgumentCaptor<F2HomeUser> captor = ArgumentCaptor.forClass(F2HomeUser.class);
@@ -100,11 +169,31 @@ class F2HomeAuthServiceTest {
         assertThat(saved.isPhoneVerified()).isTrue();
         assertThat(saved.getRole()).isEqualTo(F2HomeRole.FARMER);
         assertThat(saved.getPasswordHash()).isEqualTo("bcrypt-hash");
+        // Profile + self-taken photo came from the step-1 draft.
+        assertThat(saved.getFullName()).isEqualTo("Farmer Joe");
+        assertThat(saved.getVillage()).isEqualTo("Rampur");
+        assertThat(saved.getPhotoContentType()).isEqualTo("image/jpeg");
+        assertThat(saved.getPhotoBytes()).isEqualTo(JPEG_BYTES);
+
+        verify(draftRepository).deleteByPhoneNumber(PHONE);
 
         assertThat(response.accessToken()).isEqualTo("access-token");
         assertThat(response.refreshToken()).hasSize(64);
         assertThat(response.user().role()).isEqualTo(F2HomeRole.FARMER);
+        assertThat(response.user().village()).isEqualTo("Rampur");
         verify(refreshTokenRepository).save(any(RefreshToken.class));
+    }
+
+    private F2HomeRegistrationDraft draft() {
+        F2HomeRegistrationDraft draft = new F2HomeRegistrationDraft();
+        draft.setPhoneNumber(PHONE);
+        draft.setFullName("Farmer Joe");
+        draft.setVillage("Rampur");
+        draft.setRole(F2HomeRole.FARMER);
+        draft.setPhotoContentType("image/jpeg");
+        draft.setPhotoBytes(JPEG_BYTES);
+        draft.setPhotoSizeBytes(JPEG_BYTES.length);
+        return draft;
     }
 
     @Test
