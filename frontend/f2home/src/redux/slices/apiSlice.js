@@ -10,9 +10,12 @@ const isSecure = window.location.protocol === "https:";
 //   local  -> f2home.com (via the hosts file) or localhost, served over
 //             http on the Vite dev port: the backend runs on :8081 on this
 //             machine.
-//   dev    -> dev.f2home.com (GitHub Pages) : api-dev.f2home.com (Render)
-//   prod   -> f2home.com (https) : api.f2home.com
-//   native -> api.f2home.com
+//   native -> api.f2home.com (set once a custom API domain exists).
+//   live / anything else -> same origin ("") - the Spring Boot backend
+//             serves this built frontend itself (see SpaWebConfig), so the
+//             web app and the API are always on the same host:port there,
+//             whether that's a Render *.onrender.com URL or a future
+//             custom domain. No per-host mapping to maintain.
 const isLocalDevHost =
   host === "localhost" ||
   host === "127.0.0.1" ||
@@ -26,10 +29,8 @@ if (Capacitor.isNativePlatform()) {
   BASE_URL = "http://localhost:8081";
 } else if (host === "192.168.0.151") {
   BASE_URL = "http://192.168.0.151:8081";
-} else if (host === "dev.f2home.com") {
-  BASE_URL = "https://api-dev.f2home.com";
 } else {
-  BASE_URL = "https://api.f2home.com";
+  BASE_URL = "";
 }
 // Absolute API origin - used to build <img>/<video> src for product media,
 // which the browser fetches directly (no Authorization header; the media

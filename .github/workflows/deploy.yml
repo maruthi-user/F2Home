@@ -1,0 +1,108 @@
+name: CI / Deploy
+
+# One pipeline, one live service: build + test the frontend and backend,
+# then (only on main, only if that passed) tell Render to build the root
+# Dockerfile - which embeds the built frontend into the Spring Boot jar -
+# and deploy it. Nothing is ever deployed from a red build.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Re-run / redeploy the current main by hand from the Actions tab.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: f2home-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend - build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/f2home
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/f2home/package-lock.json
+
+      - run: npm ci
+
+      - name: Lint (non-blocking)
+        continue-on-error: true
+        run: npm run lint
+
+      - run: npm run build
+
+  backend:
+    name: Backend - test and package
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: temurin
+          cache: maven
+
+      - name: Test and package
+        # verify = compile + unit tests (Mockito only, no database) + jar.
+        run: ./mvnw -B --no-transfer-progress verify
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-reports
+          path: backend/target/surefire-reports
+          retention-days: 7
+          if-no-files-found: warn
+
+  deploy:
+    name: Deploy -> Render
+    needs: [frontend, backend]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy hook
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::error::Secret RENDER_DEPLOY_HOOK_URL is not set (Render > service > Settings > Deploy Hook)."
+            exit 1
+          fi
+          # Render builds the root Dockerfile (frontend + backend in one
+          # image) from this commit on its side.
+          curl -fsS -X POST "$HOOK" -o /dev/null -w "Render responded HTTP %{http_code}\n"
+
+      - name: Wait for the new build to become healthy
+        env:
+          HEALTH_URL: ${{ secrets.RENDER_HEALTH_URL }}
+        run: |
+          if [ -z "$HEALTH_URL" ]; then
+            echo "::warning::Secret RENDER_HEALTH_URL not set - skipping health wait. Set it to e.g. https://f2home.onrender.com/actuator/health"
+            exit 0
+          fi
+          for i in $(seq 1 40); do
+            if curl -fsS --max-time 20 "$HEALTH_URL" | grep -q '"UP"'; then
+              echo "$HEALTH_URL is UP"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::warning::Backend did not report UP within 10 minutes - check the Render dashboard."

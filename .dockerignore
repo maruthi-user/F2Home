@@ -1,0 +1,19 @@
+# Keep the build context small and deterministic: never ship a locally
+# installed node_modules or a locally built jar/dist into the image - the
+# Dockerfile installs/builds everything itself inside each stage.
+.git/
+.github/
+.claude/
+.kilo/
+.vscode/
+.idea/
+
+**/node_modules/
+**/build/
+**/dist/
+**/target/
+
+*.md
+.env
+.env.*
+!*.env.example

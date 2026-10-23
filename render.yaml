@@ -1,27 +1,29 @@
-# Render Blueprint for the F2Home DEV environment (free plan).
+# Render Blueprint for the F2Home LIVE service (single plan).
 # Docs: https://render.com/docs/blueprint-spec
 #
-# Creates one Docker web service built from backend/Dockerfile. Values marked
+# ONE Docker web service, built from the repo-root Dockerfile, which embeds
+# the built React frontend into the Spring Boot jar - so this one service is
+# the whole app (web + API), no separate frontend host. Values marked
 # sync: false are entered once in the Render dashboard and never stored here.
 #
 # autoDeploy is off on purpose: deploys are triggered by
-# .github/workflows/dev-deploy.yml *after* Dev CI has passed, via the
-# service's Deploy Hook URL (stored as the RENDER_DEPLOY_HOOK_URL GitHub
-# secret). Pushing broken code therefore never reaches api-dev.f2home.com.
+# .github/workflows/deploy.yml *after* CI (frontend build + backend tests)
+# has passed, via the service's Deploy Hook URL (stored as the
+# RENDER_DEPLOY_HOOK_URL GitHub secret). Pushing broken code therefore never
+# reaches the live URL.
 
 services:
   - type: web
-    name: f2home-backend-dev
+    name: f2home
     runtime: docker
     plan: free
     region: singapore
-    rootDir: backend
     dockerfilePath: ./Dockerfile
     autoDeploy: false
     healthCheckPath: /actuator/health
     envVars:
       - key: SPRING_PROFILES_ACTIVE
-        value: dev
+        value: prod
       # Neon connection string, e.g.
       # jdbc:postgresql://<host>/F2Home?sslmode=require&prepareThreshold=0
       - key: DB_URL
@@ -30,6 +32,6 @@ services:
         sync: false
       - key: DB_PASSWORD
         sync: false
-      # openssl rand -base64 32  (must differ from local / prod)
+      # openssl rand -base64 32  (must differ from every other environment)
       - key: F2HOME_JWT_SECRET
         sync: false
