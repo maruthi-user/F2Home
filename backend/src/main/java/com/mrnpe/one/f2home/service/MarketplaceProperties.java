@@ -30,6 +30,14 @@ public class MarketplaceProperties {
     @Value("${f2home.marketplace.max-video-bytes:26214400}")
     private long maxVideoBytes;
 
+    /** Perishables auto-expire this many hours after listing. */
+    @Value("${f2home.marketplace.perishable-expiry-hours:48}")
+    private int perishableExpiryHours = 48;
+
+    /** Comma-separated category ids treated as perishable (cannot be stored > 2 days). */
+    @Value("${f2home.marketplace.perishable-categories:vegetables,fruits}")
+    private String perishableCategories = "vegetables,fruits";
+
     public MarketplaceProperties() {
     }
 
@@ -42,6 +50,16 @@ public class MarketplaceProperties {
         this.maxImageBytes = maxImageBytes;
         this.maxImagesPerProduct = maxImagesPerProduct;
         this.maxVideoBytes = maxVideoBytes;
+    }
+
+    public int getPerishableExpiryHours() { return perishableExpiryHours; }
+
+    public boolean isPerishableCategory(String category) {
+        if (category == null) return false;
+        for (String c : perishableCategories.split(",")) {
+            if (c.trim().equalsIgnoreCase(category.trim())) return true;
+        }
+        return false;
     }
 
     public double getNearbyRadiusKm() { return nearbyRadiusKm; }

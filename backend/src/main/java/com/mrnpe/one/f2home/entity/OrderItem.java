@@ -5,6 +5,8 @@ import java.util.UUID;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -43,6 +45,16 @@ public class OrderItem {
     @Column(name = "line_total", nullable = false, precision = 12, scale = 2)
     private BigDecimal lineTotal;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20)
+    private OrderItemStatus status = OrderItemStatus.PENDING;
+
+    @Column(name = "decided_at")
+    private java.time.LocalDateTime decidedAt;
+
+    @Column(name = "category", length = 50)
+    private String category;
+
     @Column(name = "thumbnail_id")
     private UUID thumbnailId;
 
@@ -63,6 +75,12 @@ public class OrderItem {
     public void setQuantity(int quantity) { this.quantity = quantity; }
     public BigDecimal getLineTotal() { return lineTotal; }
     public void setLineTotal(BigDecimal lineTotal) { this.lineTotal = lineTotal; }
+    public OrderItemStatus getStatus() { return status; }
+    public void setStatus(OrderItemStatus status) { this.status = status; }
+    public java.time.LocalDateTime getDecidedAt() { return decidedAt; }
+    public void setDecidedAt(java.time.LocalDateTime decidedAt) { this.decidedAt = decidedAt; }
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
     public UUID getThumbnailId() { return thumbnailId; }
     public void setThumbnailId(UUID thumbnailId) { this.thumbnailId = thumbnailId; }
 }

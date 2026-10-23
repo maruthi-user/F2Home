@@ -1,6 +1,7 @@
 package com.mrnpe.one.f2home.entity;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import jakarta.persistence.Column;
@@ -64,6 +65,20 @@ public class Product {
     @Column(name = "status", nullable = false, length = 20)
     private ProductStatus status = ProductStatus.ACTIVE;
 
+    @Column(name = "harvest_date")
+    private LocalDate harvestDate;
+
+    /** Perishable listings (vegetables, fruits) auto-expire at {@code expiresAt}. */
+    @Column(name = "perishable", nullable = false)
+    private boolean perishable;
+
+    @Column(name = "expires_at")
+    private LocalDateTime expiresAt;
+
+    /** When the listing was expired or deleted. */
+    @Column(name = "ended_at")
+    private LocalDateTime endedAt;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
@@ -107,6 +122,14 @@ public class Product {
     public void setLng(double lng) { this.lng = lng; }
     public ProductStatus getStatus() { return status; }
     public void setStatus(ProductStatus status) { this.status = status; }
+    public LocalDate getHarvestDate() { return harvestDate; }
+    public void setHarvestDate(LocalDate harvestDate) { this.harvestDate = harvestDate; }
+    public boolean isPerishable() { return perishable; }
+    public void setPerishable(boolean perishable) { this.perishable = perishable; }
+    public LocalDateTime getExpiresAt() { return expiresAt; }
+    public void setExpiresAt(LocalDateTime expiresAt) { this.expiresAt = expiresAt; }
+    public LocalDateTime getEndedAt() { return endedAt; }
+    public void setEndedAt(LocalDateTime endedAt) { this.endedAt = endedAt; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
 }

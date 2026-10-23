@@ -1,6 +1,7 @@
 package com.mrnpe.one.f2home.dto;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -28,7 +29,10 @@ public record ProductResponse(
         List<MediaResponse> media,
         Double distanceKm,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        LocalDate harvestDate,
+        boolean perishable,
+        LocalDateTime expiresAt
 ) {
     public record LocationResponse(double lat, double lng, String label) {
     }
@@ -63,6 +67,9 @@ public record ProductResponse(
                 media.stream().map(MediaResponse::from).toList(),
                 distanceKm,
                 p.getCreatedAt(),
-                p.getUpdatedAt());
+                p.getUpdatedAt(),
+                p.getHarvestDate(),
+                p.isPerishable(),
+                p.getExpiresAt());
     }
 }

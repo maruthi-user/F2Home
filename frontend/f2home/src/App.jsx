@@ -9,6 +9,7 @@ import AuthExpiryWatcher from "./components/common/AuthExpiryWatcher";
 import ProcessingOverlay from "./components/common/ProcessingOverlay";
 import CartOwnerSync from "./components/common/CartOwnerSync";
 import F2HomeLogo from "./components/ui/F2HomeLogo";
+import RoleRoute from "./components/common/RoleRoute";
 import { PUBLIC_PATHS } from "./utils/publicPaths";
 
 
@@ -19,13 +20,20 @@ const CategoryPage = lazy(() => import("./pages/f2home/marketplace/CategoryPage"
 const ProductDetailPage = lazy(() => import("./pages/f2home/marketplace/ProductDetailPage"));
 const CartPage = lazy(() => import("./pages/f2home/marketplace/CartPage"));
 const CheckoutPage = lazy(() => import("./pages/f2home/marketplace/CheckoutPage"));
-const MyProducts = lazy(() => import("./pages/f2home/farm/MyProducts"));
+const FarmMarketplace = lazy(() => import("./pages/f2home/farm/FarmMarketplace"));
+const FarmProductDetail = lazy(() => import("./pages/f2home/farm/FarmProductDetail"));
+const FarmOrders = lazy(() => import("./pages/f2home/farm/FarmOrders"));
+const MyFarm = lazy(() => import("./pages/f2home/farm/MyFarm"));
+const FarmProfile = lazy(() => import("./pages/f2home/farm/FarmProfile"));
 const MyOrders = lazy(() => import("./pages/f2home/orders/MyOrders"));
+const FarmerApprovals = lazy(() => import("./pages/f2home/admin/FarmerApprovals"));
 const RegisterPage = lazy(() => import("./pages/auth/RegisterPage"));
 const LoginPage = lazy(() => import("./LoginPage"));
 const ForgotPassword = lazy(() => import("./pages/auth/ForgotPassword"));
 const RestorePassword = lazy(() => import("./pages/auth/RestorePassword"));
 const NotFound = lazy(() => import("./pages/not-found"));
+
+const FARM_ROLES = ["FARMER", "ADMIN"];
 
 // Branded full-screen loader shown while a public route chunk is downloading
 // (e.g. on a hard refresh of the browser).
@@ -78,8 +86,43 @@ function AppRouter() {
         <Route path="/app/marketplace/:category/:id" component={ProductDetailPage} />
         <Route path="/app/cart" component={CartPage} />
         <Route path="/app/checkout" component={CheckoutPage} />
-        <Route path="/app/farm/products" component={MyProducts} />
+        {/* Farmer modules - role-gated (the API enforces the same roles) */}
+        <Route path="/app/farm/products">
+          <Redirect to="/app/farm/marketplace" />
+        </Route>
+        <Route path="/app/farm/marketplace">
+          <RoleRoute roles={FARM_ROLES}>
+            <FarmMarketplace />
+          </RoleRoute>
+        </Route>
+        <Route path="/app/farm/marketplace/:id">
+          <RoleRoute roles={FARM_ROLES}>
+            <FarmProductDetail />
+          </RoleRoute>
+        </Route>
+        <Route path="/app/farm/orders">
+          <RoleRoute roles={["FARMER"]}>
+            <FarmOrders />
+          </RoleRoute>
+        </Route>
+        <Route path="/app/farm/history">
+          <RoleRoute roles={FARM_ROLES}>
+            <MyFarm />
+          </RoleRoute>
+        </Route>
+        <Route path="/app/farm/profile">
+          <RoleRoute roles={["FARMER"]}>
+            <FarmProfile />
+          </RoleRoute>
+        </Route>
         <Route path="/app/orders" component={MyOrders} />
+
+        {/* Admin only */}
+        <Route path="/app/admin/farmers">
+          <RoleRoute roles={["ADMIN"]}>
+            <FarmerApprovals />
+          </RoleRoute>
+        </Route>
 
         <Route component={NotFound} />
       </Switch>

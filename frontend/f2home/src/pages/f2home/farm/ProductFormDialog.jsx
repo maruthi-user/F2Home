@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, Controller, useWatch } from "react-hook-form";
 import { Crosshair, ImagePlus, Loader, MapPin, Trash2, Video, X } from "lucide-react";
 import {
   Dialog,
@@ -19,7 +19,9 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   MARKETPLACE_CATEGORIES,
+  PERISHABLE_EXPIRY_HOURS,
   PRODUCT_UNITS,
+  isPerishableCategory,
 } from "@/config/marketplaceCategories";
 import {
   buildProductFormData,
@@ -48,6 +50,7 @@ const emptyValues = {
   price: "",
   unit: "kg",
   quantity: "",
+  harvestDate: "",
 };
 
 // Add/edit dialog for a farmer's own listing. New photos/video are held as
@@ -75,6 +78,7 @@ export default function ProductFormDialog({ open, onOpenChange, product }) {
   const [videoPreview, setVideoPreview] = useState(null);
   const [fileError, setFileError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [review, setReview] = useState(null); // payload awaiting confirmation
 
   // Where the produce is. Customers only see listings within 20 km of
   // themselves, so a listing needs coordinates: from the device's GPS, or
@@ -110,6 +114,7 @@ export default function ProductFormDialog({ open, onOpenChange, product }) {
             price: product.price,
             unit: product.unit,
             quantity: product.quantity,
+            harvestDate: product.harvestDate || "",
           }
         : emptyValues
     );
@@ -122,6 +127,7 @@ export default function ProductFormDialog({ open, onOpenChange, product }) {
     setImages([]);
     setVideo(null);
     setFileError("");
+    setReview(null);
 
     setPlaceName(product?.location?.label || "");
     setCoords(
@@ -134,6 +140,9 @@ export default function ProductFormDialog({ open, onOpenChange, product }) {
     setShowCoords(false);
     setLocationError("");
   }, [open, product, reset]);
+
+  const perishable = isPerishableCategory(useWatch({ control, name: "category" }));
+  const today = new Date().toLocaleDateString("en-CA"); // yyyy-mm-dd, local
 
   const handleUseCurrentLocation = async () => {
     setIsLocating(true);
@@ -266,12 +275,27 @@ export default function ProductFormDialog({ open, onOpenChange, product }) {
         price: Number(data.price),
         unit: data.unit,
         quantity: Number(data.quantity),
+        harvestDate: data.harvestDate || null,
         location,
         keepMediaIds: [
           ...existingImages.map((m) => m.id),
           ...(existingVideo ? [existingVideo.id] : []),
         ],
       };
+      setReview(payload);
+    } catch (err) {
+      setFileError(err?.message || "Please check the details and try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const confirmSave = async () => {
+    const payload = review;
+    if (!payload) return;
+    setFileError("");
+    setIsSubmitting(true);
+    try {
       const formData = buildProductFormData(payload, images, video);
 
       if (isEditing) {
@@ -295,11 +319,64 @@ export default function ProductFormDialog({ open, onOpenChange, product }) {
       <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-[#33691e]">
-            {isEditing ? "Edit Product" : "Add Product"}
+            {review ? "Confirm product details" : isEditing ? "Edit Product" : "Add Product"}
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        {review && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Check everything below. Go back to change anything, or confirm to {isEditing ? "save" : "list"} it now.
+            </p>
+            <dl className="rounded-xl border border-gray-100 px-3 dark:border-gray-800">
+              {[
+                ["Name", review.name],
+                ["Category", MARKETPLACE_CATEGORIES.find((c) => c.id === review.category)?.label || review.category],
+                ["Price", `₹${review.price} / ${review.unit}`],
+                ["Quantity", `${review.quantity} ${review.unit}`],
+                ["Harvest date", review.harvestDate || "—"],
+                ["Location", review.location.label],
+                ["Description", review.description || "—"],
+              ].map(([k, v]) => (
+                <div key={k} className="flex justify-between gap-4 border-b border-gray-100 py-2 text-sm last:border-0 dark:border-gray-800">
+                  <dt className="text-muted-foreground">{k}</dt>
+                  <dd className="text-right font-medium">{v}</dd>
+                </div>
+              ))}
+            </dl>
+            {(existingImages.length > 0 || imagePreviews.length > 0) && (
+              <div className="flex flex-wrap gap-2">
+                {[...existingImages.map((m) => m.url), ...imagePreviews].map((src) => (
+                  <img key={src} src={src} alt="" className="h-16 w-16 rounded-lg object-cover" />
+                ))}
+              </div>
+            )}
+            {(video || existingVideo) && <p className="text-xs text-muted-foreground">Includes 1 video.</p>}
+            {isPerishableCategory(review.category) && (
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                Perishable: this listing is removed automatically {PERISHABLE_EXPIRY_HOURS} hours after it is added.
+              </p>
+            )}
+            {fileError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">{fileError}</div>
+            )}
+            <DialogFooter className="gap-2 sm:gap-2">
+              <Button type="button" variant="outline" disabled={isSubmitting} onClick={() => setReview(null)} className="rounded-full">
+                Edit details
+              </Button>
+              <Button
+                type="button"
+                disabled={isSubmitting}
+                onClick={confirmSave}
+                className="rounded-full bg-gradient-to-r from-[#8bc34a] to-[#33691e] text-white hover:opacity-90"
+              >
+                {isSubmitting ? "Saving..." : isEditing ? "Confirm & save" : "Confirm & list"}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit(onSubmit)} className={`space-y-4 ${review ? "hidden" : ""}`}>
           <div>
             <label className={labelClass}>Product Name</label>
             <input
@@ -400,6 +477,27 @@ export default function ProductFormDialog({ open, onOpenChange, product }) {
                 <p className="mt-1 text-sm text-red-500">{errors.quantity.message}</p>
               )}
             </div>
+          </div>
+
+          <div>
+            <label className={labelClass}>Harvest Date (optional)</label>
+            <input
+              type="date"
+              max={today}
+              className={fieldClass}
+              {...register("harvestDate", {
+                validate: (v) => !v || v <= today || "Harvest date cannot be in the future",
+              })}
+            />
+            {errors.harvestDate && (
+              <p className="mt-1 text-sm text-red-500">{errors.harvestDate.message}</p>
+            )}
+            {perishable && (
+              <p className="mt-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                Perishable: this listing is removed automatically {PERISHABLE_EXPIRY_HOURS} hours after it is
+                added (it stays in My Farm as history).
+              </p>
+            )}
           </div>
 
           <div>
@@ -550,10 +648,8 @@ export default function ProductFormDialog({ open, onOpenChange, product }) {
               className="w-full rounded-full bg-gradient-to-r from-[#8bc34a] to-[#33691e] text-white hover:opacity-90"
             >
               {isSubmitting
-                ? "Saving..."
-                : isEditing
-                  ? "Save Changes"
-                  : "List Product"}
+                ? "Checking..."
+                : "Save"}
             </Button>
           </DialogFooter>
         </form>

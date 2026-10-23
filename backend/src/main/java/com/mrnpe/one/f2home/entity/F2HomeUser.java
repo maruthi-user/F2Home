@@ -47,6 +47,25 @@ public class F2HomeUser {
     @Column(name = "village", length = 120)
     private String village;
 
+    // ---- Farmer-only: farm pin + delivery reach (null until the farmer
+    // sets it; see FarmProfileService). Nothing else reads these for a
+    // non-FARMER row. ----
+    @Column(name = "farm_lat")
+    private Double farmLat;
+
+    @Column(name = "farm_lng")
+    private Double farmLng;
+
+    @Column(name = "farm_location_label", length = 255)
+    private String farmLocationLabel;
+
+    @Column(name = "delivery_radius_km")
+    private Double deliveryRadiusKm;
+
+    /** Comma-separated 3-letter day codes, e.g. "TUE,SAT". */
+    @Column(name = "delivery_days", length = 50)
+    private String deliveryDays;
+
     // Self-taken registration photo (bytea, like product media).
     @Column(name = "photo_content_type", length = 100)
     private String photoContentType;
@@ -103,6 +122,21 @@ public class F2HomeUser {
 
     public String getVillage() { return village; }
     public void setVillage(String village) { this.village = village; }
+
+    public Double getFarmLat() { return farmLat; }
+    public void setFarmLat(Double farmLat) { this.farmLat = farmLat; }
+
+    public Double getFarmLng() { return farmLng; }
+    public void setFarmLng(Double farmLng) { this.farmLng = farmLng; }
+
+    public String getFarmLocationLabel() { return farmLocationLabel; }
+    public void setFarmLocationLabel(String farmLocationLabel) { this.farmLocationLabel = farmLocationLabel; }
+
+    public Double getDeliveryRadiusKm() { return deliveryRadiusKm; }
+    public void setDeliveryRadiusKm(Double deliveryRadiusKm) { this.deliveryRadiusKm = deliveryRadiusKm; }
+
+    public String getDeliveryDays() { return deliveryDays; }
+    public void setDeliveryDays(String deliveryDays) { this.deliveryDays = deliveryDays; }
 
     public String getPhotoContentType() { return photoContentType; }
     public void setPhotoContentType(String photoContentType) { this.photoContentType = photoContentType; }

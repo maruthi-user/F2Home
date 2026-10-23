@@ -22,3 +22,10 @@ export const PRODUCT_UNITS = ["kg", "gram", "dozen", "litre", "piece"];
 // Short unit labels for tight spaces (product tiles, cart badges).
 const UNIT_ABBR = { kg: "kg", gram: "g", dozen: "dz", litre: "L", piece: "pc" };
 export const shortUnit = (unit) => UNIT_ABBR[unit] || unit;
+
+// Categories that cannot be stored more than ~2 days. The backend
+// (f2home.marketplace.perishable-categories) is the source of truth and
+// auto-expires these 48h after listing; this list only drives UI hints.
+export const PERISHABLE_CATEGORY_IDS = ["vegetables", "fruits"];
+export const PERISHABLE_EXPIRY_HOURS = 48;
+export const isPerishableCategory = (id) => PERISHABLE_CATEGORY_IDS.includes(id);

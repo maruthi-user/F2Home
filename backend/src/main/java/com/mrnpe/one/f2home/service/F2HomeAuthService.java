@@ -149,7 +149,12 @@ public class F2HomeAuthService {
         user.setPhotoContentType(draft.getPhotoContentType());
         user.setPhotoBytes(draft.getPhotoBytes());
         user.setPhotoSizeBytes(draft.getPhotoSizeBytes());
-        user.setStatus(F2HomeUserStatus.ACTIVE);
+        // Farmers wait for an admin to approve them (hidden from the
+        // marketplace until then - see ProductService); customers are live
+        // immediately since there is nothing to review.
+        user.setStatus(draft.getRole() == F2HomeRole.FARMER
+                ? F2HomeUserStatus.PENDING_APPROVAL
+                : F2HomeUserStatus.ACTIVE);
         user.setPhoneVerified(true);
         user = userRepository.save(user);
 
@@ -172,7 +177,9 @@ public class F2HomeAuthService {
         F2HomeUser user = userRepository.findByPhoneNumber(phoneNumber)
                 .orElseThrow(() -> new BadRequestException("Invalid phone number or password."));
 
-        if (user.getStatus() != F2HomeUserStatus.ACTIVE) {
+        // PENDING_APPROVAL farmers can still log in (and list produce) while
+        // they wait - only a rejected/suspended (INACTIVE) account is blocked.
+        if (user.getStatus() == F2HomeUserStatus.INACTIVE) {
             throw new IllegalStateException(
                     "This account is inactive. Please contact F2Home support.");
         }

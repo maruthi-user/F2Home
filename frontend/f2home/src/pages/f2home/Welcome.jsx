@@ -1,6 +1,6 @@
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { Sprout, ShoppingBasket, Truck, TrendingUp } from "lucide-react";
+import { Sprout, ShoppingBasket, Truck, TrendingUp, Clock, ShieldCheck } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { ROLE_PERMISSIONS } from "@/utils/rolePermissionMap";
 import { hasPermission } from "@/utils/permissions";
@@ -18,8 +18,8 @@ const CARDS = [
   {
     icon: Sprout,
     title: "My Farm",
-    description: "List your harvest and manage your listings.",
-    path: "/app/farm/products",
+    description: "Your product history, sales and earnings.",
+    path: "/app/farm/history",
     permission: "MY_FARM_VIEW",
   },
   {
@@ -34,6 +34,13 @@ const CARDS = [
     description: "Track your orders, sales and earnings. Coming soon.",
     comingSoon: true,
   },
+  {
+    icon: ShieldCheck,
+    title: "Farmer Approvals",
+    description: "Review new farmers before their produce goes live.",
+    path: "/app/admin/farmers",
+    permission: "MANAGE_USERS",
+  },
 ];
 
 export default function Welcome() {
@@ -41,7 +48,10 @@ export default function Welcome() {
   const navigate = useNavigate();
   const permissions = ROLE_PERMISSIONS[user?.role] || [];
 
-  const visibleCards = CARDS.filter(
+  const isFarmer = user?.role === "FARMER";
+  const visibleCards = CARDS.map((card) =>
+    isFarmer && card.title === "Marketplace" ? { ...card, path: "/app/farm/marketplace" } : card
+  ).filter(
     (card) => card.comingSoon || hasPermission(permissions, card.permission)
   );
 
@@ -55,6 +65,19 @@ export default function Welcome() {
           Bringing Nature Closer to You.
         </p>
       </div>
+
+      {isFarmer && user?.status === "PENDING_APPROVAL" && (
+        <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          <Clock className="mt-0.5 h-5 w-5 shrink-0" />
+          <div>
+            <p className="font-medium">Your account is being checked.</p>
+            <p className="mt-0.5 text-amber-700 dark:text-amber-300">
+              You can already add products from My Farm - they'll go live for customers as soon as
+              an admin approves your farmer account.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {visibleCards.map(({ icon: Icon, title, description, path, comingSoon }) => (

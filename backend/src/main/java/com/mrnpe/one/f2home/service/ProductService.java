@@ -1,11 +1,13 @@
 package com.mrnpe.one.f2home.service;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -23,6 +25,7 @@ import com.mrnpe.one.f2home.entity.Product;
 import com.mrnpe.one.f2home.entity.ProductMedia;
 import com.mrnpe.one.f2home.entity.ProductMediaType;
 import com.mrnpe.one.f2home.entity.ProductStatus;
+import com.mrnpe.one.f2home.repository.F2HomeUserRepository;
 import com.mrnpe.one.f2home.repository.ProductMediaRepository;
 import com.mrnpe.one.f2home.repository.ProductMediaRepository.ProductMediaMeta;
 import com.mrnpe.one.f2home.repository.ProductRepository;
@@ -32,37 +35,56 @@ import com.mrnpe.one.f2home.security.F2HomeUserPrincipal;
  * Listings: farmers create/edit/delete their own; customers query what is
  * within the configured radius of their location. Media bytes are stored
  * with the listing (see ProductMedia) and validated for type/size/count.
+ *
+ * Every customer-facing read also hides listings from farmers who are not
+ * yet approved (or have been suspended) - see {@link #approvedFarmerIds()}.
+ * A farmer's own {@link #findMine} view is never filtered this way, so they
+ * can still see and manage their listings while waiting for approval.
  */
 @Service
 public class ProductService {
 
     private final ProductRepository productRepository;
     private final ProductMediaRepository mediaRepository;
+    private final F2HomeUserRepository userRepository;
     private final MarketplaceProperties props;
 
     public ProductService(ProductRepository productRepository,
                           ProductMediaRepository mediaRepository,
+                          F2HomeUserRepository userRepository,
                           MarketplaceProperties props) {
         this.productRepository = productRepository;
         this.mediaRepository = mediaRepository;
+        this.userRepository = userRepository;
         this.props = props;
     }
 
     // ================= QUERIES =================
 
-    /** Active listings within the configured radius of (lat, lng), nearest first. */
+    /**
+     * Active listings within each farmer's own delivery radius of (lat, lng),
+     * nearest first. The bounding box is sized to the platform-wide max
+     * ({@link MarketplaceProperties#getNearbyRadiusKm()}), which every
+     * farmer's own radius is capped at (see FarmProfileService), so it
+     * always covers them; the exact per-farmer radius is applied below.
+     */
     @Transactional(readOnly = true)
     public List<ProductResponse> findNearby(double lat, double lng, String category) {
-        double radius = props.getNearbyRadiusKm();
-        double[] box = GeoUtils.boundingBox(lat, lng, radius);
+        double maxRadius = props.getNearbyRadiusKm();
+        double[] box = GeoUtils.boundingBox(lat, lng, maxRadius);
         String cat = category == null || category.isBlank() ? null : category;
 
         record Hit(Product product, double distanceKm) {
         }
 
+        Map<Long, Double> farmerRadii = approvedFarmerRadiiKm();
         List<Hit> hits = productRepository.findActiveInBox(box[0], box[1], box[2], box[3], cat).stream()
                 .map(p -> new Hit(p, GeoUtils.haversineKm(lat, lng, p.getLat(), p.getLng())))
-                .filter(h -> h.distanceKm() <= radius)
+                .filter(h -> isLive(h.product()))
+                .filter(h -> {
+                    Double radiusKm = farmerRadii.get(h.product().getFarmerId());
+                    return radiusKm != null && h.distanceKm() <= radiusKm;
+                })
                 .sorted(Comparator.comparingDouble(Hit::distanceKm))
                 .toList();
 
@@ -79,26 +101,53 @@ public class ProductService {
         List<Product> products = category == null || category.isBlank()
                 ? productRepository.findByStatusOrderByCreatedAtDesc(ProductStatus.ACTIVE)
                 : productRepository.findByStatusAndCategoryOrderByCreatedAtDesc(ProductStatus.ACTIVE, category);
-        return withMedia(products);
+        Set<Long> approvedFarmers = approvedFarmerIds();
+        return withMedia(products.stream()
+                .filter(this::isLive)
+                .filter(p -> approvedFarmers.contains(p.getFarmerId()))
+                .toList());
     }
 
     @Transactional(readOnly = true)
     public List<ProductResponse> findByIds(Collection<Long> ids) {
         if (ids == null || ids.isEmpty()) return List.of();
-        return withMedia(productRepository.findByIdInAndStatus(ids, ProductStatus.ACTIVE));
+        Set<Long> approvedFarmers = approvedFarmerIds();
+        return withMedia(productRepository.findByIdInAndStatus(ids, ProductStatus.ACTIVE).stream()
+                .filter(this::isLive)
+                .filter(p -> approvedFarmers.contains(p.getFarmerId()))
+                .toList());
     }
 
+    /** The farmer's own listings - never filtered by approval, so they can
+     *  manage produce while waiting for an admin to approve them. */
     @Transactional(readOnly = true)
     public List<ProductResponse> findMine(F2HomeUserPrincipal farmer) {
         return withMedia(productRepository.findByFarmerIdAndStatusOrderByCreatedAtDesc(
-                farmer.id(), ProductStatus.ACTIVE));
+                farmer.id(), ProductStatus.ACTIVE).stream().filter(this::isLive).toList());
     }
 
     @Transactional(readOnly = true)
     public ProductResponse get(Long id) {
         Product p = productRepository.findByIdAndStatus(id, ProductStatus.ACTIVE)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found."));
+        if (!isLive(p) || !approvedFarmerIds().contains(p.getFarmerId())) {
+            throw new ResourceNotFoundException("Product not found.");
+        }
         return ProductResponse.from(p, mediaRepository.findByProductIdOrderBySortOrderAsc(id), null);
+    }
+
+    /** Farmers whose listings may appear outside their own "my listings" view. */
+    private Set<Long> approvedFarmerIds() {
+        return userRepository.findActiveFarmerIds();
+    }
+
+    /** Each approved farmer's own delivery radius, defaulting unset ones to the platform-wide max. */
+    private Map<Long, Double> approvedFarmerRadiiKm() {
+        double defaultRadius = props.getNearbyRadiusKm();
+        return userRepository.findActiveFarmerRadii().stream()
+                .collect(Collectors.toMap(
+                        F2HomeUserRepository.FarmerRadiusRow::getId,
+                        r -> r.getDeliveryRadiusKm() != null ? r.getDeliveryRadiusKm() : defaultRadius));
     }
 
     @Transactional(readOnly = true)
@@ -118,6 +167,9 @@ public class ProductService {
         p.setFarmerId(farmer.id());
         p.setFarmerName(farmer.fullName());
         apply(p, request);
+        p.setExpiresAt(p.isPerishable()
+                ? LocalDateTime.now().plusHours(props.getPerishableExpiryHours())
+                : null);
         p = productRepository.save(p);
 
         storeMedia(p.getId(), images, video, 0);
@@ -129,6 +181,7 @@ public class ProductService {
                                   List<MultipartFile> images, MultipartFile video) {
         Product p = productRepository.findByIdAndStatus(id, ProductStatus.ACTIVE)
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found."));
+        if (!isLive(p)) throw new BadRequestException("This listing has expired and can no longer be edited.");
         assertOwner(user, p);
 
         // Media the farmer chose to keep; everything else on the listing goes.
@@ -161,10 +214,35 @@ public class ProductService {
                 .orElseThrow(() -> new ResourceNotFoundException("Product not found."));
         assertOwner(user, p);
         p.setStatus(ProductStatus.DELETED);
+        p.setEndedAt(LocalDateTime.now());
         productRepository.save(p);
         // Bytes are only useful for live listings; order history keeps its
         // own snapshot text, not the media.
         mediaRepository.deleteByProductId(id);
+    }
+
+    /**
+     * Sweeps perishable listings past their expiry: marks them EXPIRED (kept as
+     * farm history) and drops the media bytes. Run by ProductExpiryScheduler;
+     * reads also filter on isLive(), so nothing expired is served between sweeps.
+     */
+    @Transactional
+    public int expireDue() {
+        LocalDateTime now = LocalDateTime.now();
+        List<Product> due = productRepository.findByStatusAndExpiresAtLessThanEqual(ProductStatus.ACTIVE, now);
+        for (Product p : due) {
+            p.setStatus(ProductStatus.EXPIRED);
+            p.setEndedAt(now);
+            mediaRepository.deleteByProductId(p.getId());
+        }
+        if (!due.isEmpty()) productRepository.saveAll(due);
+        return due.size();
+    }
+
+    /** Active and not past its expiry time. */
+    boolean isLive(Product p) {
+        return p.getStatus() == ProductStatus.ACTIVE
+                && (p.getExpiresAt() == null || p.getExpiresAt().isAfter(LocalDateTime.now()));
     }
 
     // ================= HELPERS =================
@@ -175,7 +253,7 @@ public class ProductService {
         }
     }
 
-    private static void apply(Product p, ProductRequest r) {
+    private void apply(Product p, ProductRequest r) {
         p.setName(r.name().trim());
         p.setCategory(r.category().trim());
         p.setDescription(r.description() == null ? null : r.description().trim());
@@ -185,6 +263,10 @@ public class ProductService {
         p.setLocationLabel(r.location().label().trim());
         p.setLat(r.location().lat());
         p.setLng(r.location().lng());
+        p.setHarvestDate(r.harvestDate());
+        // Expiry is fixed from the listing time (set on create), so editing
+        // cannot extend a perishable listing's life.
+        p.setPerishable(props.isPerishableCategory(p.getCategory()));
     }
 
     private void validateMedia(List<MultipartFile> images, MultipartFile video, int alreadyImages, boolean alreadyVideo) {

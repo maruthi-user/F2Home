@@ -59,7 +59,10 @@ public class F2HomeSecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, "/api/f2home/products/**").hasAnyRole("FARMER", "ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/f2home/products/**").hasAnyRole("FARMER", "ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/f2home/products/**").hasAnyRole("FARMER", "ADMIN")
+                        .requestMatchers("/api/f2home/farm/orders/**").hasRole("FARMER")
+                        .requestMatchers("/api/f2home/farm/**").hasAnyRole("FARMER", "ADMIN")
                         .requestMatchers("/api/f2home/orders/**").hasRole("CUSTOMER")
+                        .requestMatchers("/api/f2home/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 // Let controllers set Cache-Control themselves: product media
                 // is immutable and must be cacheable by the browser, which the
@@ -107,6 +110,11 @@ public class F2HomeSecurityConfiguration {
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/error").permitAll()
+                        // The built React SPA (served from classpath:/static,
+                        // see SpaWebConfig) - static assets and the
+                        // index.html fallback for client-side routes. Only
+                        // GET: there is nothing here to POST/PUT/DELETE to.
+                        .requestMatchers(HttpMethod.GET, "/**").permitAll()
                         .anyRequest().denyAll())
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -123,19 +131,16 @@ public class F2HomeSecurityConfiguration {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // Web names: local + production = f2home.com, dev = dev.f2home.com.
-        // The :3001 / :5173 entries keep the local Vite dev server working on
-        // both localhost and the local f2home.com host name.
+        // Only local dev needs CORS: the Vite dev server (:3001/:5173) calls
+        // the backend on a different port. Everywhere else (Render, any
+        // future custom domain) the backend serves the built frontend
+        // itself - see SpaWebConfig - so the browser never crosses origins
+        // and no CORS entry is needed there.
         configuration.setAllowedOrigins(List.of(
                 "http://localhost:3001", "http://127.0.0.1:3001",
                 "http://localhost:5173", "http://127.0.0.1:5173",
                 "http://192.168.0.151:3001",
-                "http://f2home.com", "https://f2home.com",
-                "http://www.f2home.com", "https://www.f2home.com",
-                "http://f2home.com:3001",
-                "http://dev.f2home.com", "https://dev.f2home.com",
-                "http://api.f2home.com", "https://api.f2home.com",
-                "http://api-dev.f2home.com", "https://api-dev.f2home.com"));
+                "http://f2home.com", "http://f2home.com:3001"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
         configuration.setExposedHeaders(List.of(HttpHeaders.CONTENT_DISPOSITION));

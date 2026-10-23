@@ -103,7 +103,8 @@ public class OrderService {
 
         for (Map.Entry<Long, Integer> e : wanted.entrySet()) {
             Product p = productRepository.findByIdForUpdate(e.getKey())
-                    .filter(x -> x.getStatus() == ProductStatus.ACTIVE)
+                    .filter(x -> x.getStatus() == ProductStatus.ACTIVE
+                            && (x.getExpiresAt() == null || x.getExpiresAt().isAfter(java.time.LocalDateTime.now())))
                     .orElseThrow(() -> new BadRequestException("One of the products is no longer available."));
             int qty = e.getValue();
             if (p.getQuantity() < qty) {
@@ -118,6 +119,7 @@ public class OrderService {
             item.setProductName(p.getName());
             item.setFarmerId(p.getFarmerId());
             item.setFarmerName(p.getFarmerName());
+            item.setCategory(p.getCategory());
             item.setUnit(p.getUnit());
             item.setUnitPrice(p.getPrice());
             item.setQuantity(qty);

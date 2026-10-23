@@ -17,70 +17,136 @@
           "name": "Vegetables",
           "path": "/app/marketplace/vegetables",
           "icon": "Carrot",
-          "allowedRoles": ["CUSTOMER", "FARMER", "ADMIN"]
+          "allowedRoles": [
+            "CUSTOMER",
+            "ADMIN"
+          ]
         },
         {
           "id": "fruits",
           "name": "Fruits",
           "path": "/app/marketplace/fruits",
           "icon": "Apple",
-          "allowedRoles": ["CUSTOMER", "FARMER", "ADMIN"]
+          "allowedRoles": [
+            "CUSTOMER",
+            "ADMIN"
+          ]
         },
         {
           "id": "rice-grains",
           "name": "Rice & Grains",
           "path": "/app/marketplace/rice-grains",
           "icon": "Wheat",
-          "allowedRoles": ["CUSTOMER", "FARMER", "ADMIN"]
+          "allowedRoles": [
+            "CUSTOMER",
+            "ADMIN"
+          ]
         },
         {
           "id": "dhals-pulses",
           "name": "Dhals & Pulses",
           "path": "/app/marketplace/dhals-pulses",
           "icon": "Bean",
-          "allowedRoles": ["CUSTOMER", "FARMER", "ADMIN"]
+          "allowedRoles": [
+            "CUSTOMER",
+            "ADMIN"
+          ]
         },
         {
           "id": "sheep-livestock",
           "name": "Sheep & Livestock",
           "path": "/app/marketplace/sheep-livestock",
           "icon": "PawPrint",
-          "allowedRoles": ["CUSTOMER", "FARMER", "ADMIN"]
+          "allowedRoles": [
+            "CUSTOMER",
+            "ADMIN"
+          ]
         },
         {
           "id": "dairy-poultry",
           "name": "Dairy & Poultry",
           "path": "/app/marketplace/dairy-poultry",
           "icon": "Egg",
-          "allowedRoles": ["CUSTOMER", "FARMER", "ADMIN"]
+          "allowedRoles": [
+            "CUSTOMER",
+            "ADMIN"
+          ]
         },
         {
           "id": "spices-herbs",
           "name": "Spices & Herbs",
           "path": "/app/marketplace/spices-herbs",
           "icon": "Flame",
-          "allowedRoles": ["CUSTOMER", "FARMER", "ADMIN"]
+          "allowedRoles": [
+            "CUSTOMER",
+            "ADMIN"
+          ]
         },
         {
-          "id": "my-products",
-          "name": "My Products",
-          "path": "/app/farm/products",
+          "id": "farm-marketplace",
+          "name": "Marketplace",
+          "path": "/app/farm/marketplace",
+          "icon": "Store",
+          "allowedRoles": [
+            "FARMER",
+            "ADMIN"
+          ]
+        },
+        {
+          "id": "farm-orders",
+          "name": "My Orders",
+          "path": "/app/farm/orders",
+          "icon": "ClipboardList",
+          "allowedRoles": [
+            "FARMER"
+          ]
+        },
+        {
+          "id": "my-farm",
+          "name": "My Farm",
+          "path": "/app/farm/history",
           "icon": "Sprout",
-          "allowedRoles": ["FARMER", "ADMIN"]
+          "allowedRoles": [
+            "FARMER",
+            "ADMIN"
+          ]
+        },
+        {
+          "id": "farm-delivery-settings",
+          "name": "Delivery Settings",
+          "path": "/app/farm/profile",
+          "icon": "Truck",
+          "allowedRoles": [
+            "FARMER"
+          ]
         },
         {
           "id": "cart",
           "name": "Cart",
           "path": "/app/cart",
           "icon": "ShoppingCart",
-          "allowedRoles": ["CUSTOMER"]
+          "allowedRoles": [
+            "CUSTOMER"
+          ]
         },
         {
           "id": "my-orders",
           "name": "My Orders",
           "path": "/app/orders",
           "icon": "Package",
-          "allowedRoles": ["CUSTOMER", "ADMIN"]
+          "allowedRoles": [
+            "CUSTOMER",
+            "ADMIN"
+          ]
+        },
+        {
+          "id": "farmer-approvals",
+          "name": "Farmer Approvals",
+          "path": "/app/admin/farmers",
+          "icon": "ShieldCheck",
+          "allowedRoles": [
+            "ADMIN"
+          ]
         }
       ]
     }

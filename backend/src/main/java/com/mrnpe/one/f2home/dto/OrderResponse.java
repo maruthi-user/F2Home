@@ -31,7 +31,8 @@ public record OrderResponse(
     }
 
     public record Item(Long productId, String productName, String farmerName, String unit, BigDecimal unitPrice,
-                       int quantity, BigDecimal lineTotal, String thumbnailUrl) {
+                       int quantity, BigDecimal lineTotal, String thumbnailUrl,
+                       com.mrnpe.one.f2home.entity.OrderItemStatus status) {
         static Item from(OrderItem i) {
             return new Item(
                     i.getProductId(),
@@ -43,7 +44,8 @@ public record OrderResponse(
                     i.getLineTotal(),
                     i.getThumbnailId() != null && i.getProductId() != null
                             ? ProductResponse.mediaUrl(i.getProductId(), i.getThumbnailId())
-                            : null);
+                            : null,
+                    i.getStatus());
         }
     }
 

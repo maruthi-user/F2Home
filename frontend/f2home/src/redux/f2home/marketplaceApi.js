@@ -24,7 +24,7 @@ export function buildProductFormData(product, images = [], video = null) {
 }
 
 export const marketplaceApi = apiSlice
-  .enhanceEndpoints({ addTagTypes: ["Product", "Order"] })
+  .enhanceEndpoints({ addTagTypes: ["Product", "Order", "Farm"] })
   .injectEndpoints({
     endpoints: (builder) => ({
       // Server-side rules (radius, order minimums, media limits, payment
@@ -75,6 +75,43 @@ export const marketplaceApi = apiSlice
         ],
       }),
 
+      // Farmer: every listing ever added (active / expired / deleted) with sales.
+      getFarmHistory: builder.query({
+        query: () => "/api/f2home/farm/history",
+        providesTags: [{ type: "Farm", id: "HISTORY" }],
+      }),
+
+      // Farmer: their own farm pin + delivery radius/days.
+      getFarmProfile: builder.query({
+        query: () => "/api/f2home/farm/profile",
+        providesTags: [{ type: "Farm", id: "PROFILE" }],
+      }),
+
+      updateFarmProfile: builder.mutation({
+        query: (body) => ({ url: "/api/f2home/farm/profile", method: "PUT", body }),
+        invalidatesTags: [{ type: "Farm", id: "PROFILE" }],
+      }),
+
+      // Farmer: order lines for their products (pending / accepted / rejected).
+      getFarmOrders: builder.query({
+        query: () => "/api/f2home/farm/orders",
+        providesTags: [{ type: "Farm", id: "ORDERS" }],
+      }),
+
+      decideFarmOrder: builder.mutation({
+        query: ({ itemId, accept }) => ({
+          url: `/api/f2home/farm/orders/${itemId}/${accept ? "accept" : "reject"}`,
+          method: "POST",
+        }),
+        // Rejecting returns stock; accepting changes sold / revenue.
+        invalidatesTags: [
+          { type: "Farm", id: "ORDERS" },
+          { type: "Farm", id: "HISTORY" },
+          { type: "Product", id: "MINE" },
+          { type: "Product", id: "LIST" },
+        ],
+      }),
+
       getProduct: builder.query({
         query: (id) => `/api/f2home/products/${id}`,
         providesTags: (result, error, id) => [{ type: "Product", id }],
@@ -86,7 +123,11 @@ export const marketplaceApi = apiSlice
           method: "POST",
           body: formData,
         }),
-        invalidatesTags: [{ type: "Product", id: "LIST" }, { type: "Product", id: "MINE" }],
+        invalidatesTags: [
+          { type: "Product", id: "LIST" },
+          { type: "Product", id: "MINE" },
+          { type: "Farm", id: "HISTORY" },
+        ],
       }),
 
       updateProduct: builder.mutation({
@@ -96,6 +137,7 @@ export const marketplaceApi = apiSlice
           body: formData,
         }),
         invalidatesTags: (result, error, { id }) => [
+          { type: "Farm", id: "HISTORY" },
           { type: "Product", id },
           { type: "Product", id: "LIST" },
           { type: "Product", id: "MINE" },
@@ -108,6 +150,7 @@ export const marketplaceApi = apiSlice
           method: "DELETE",
         }),
         invalidatesTags: (result, error, id) => [
+          { type: "Farm", id: "HISTORY" },
           { type: "Product", id },
           { type: "Product", id: "LIST" },
           { type: "Product", id: "MINE" },
@@ -121,7 +164,11 @@ export const marketplaceApi = apiSlice
           body,
         }),
         // Stock changed, so every cached product list is stale.
-        invalidatesTags: [{ type: "Order", id: "LIST" }, { type: "Product", id: "LIST" }],
+        invalidatesTags: [
+          { type: "Order", id: "LIST" },
+          { type: "Product", id: "LIST" },
+          { type: "Farm", id: "HISTORY" },
+        ],
       }),
 
       getMyOrders: builder.query({
@@ -137,6 +184,11 @@ export const {
   useGetAllProductsQuery,
   useGetProductsByIdsQuery,
   useGetMyProductsQuery,
+  useGetFarmHistoryQuery,
+  useGetFarmProfileQuery,
+  useUpdateFarmProfileMutation,
+  useGetFarmOrdersQuery,
+  useDecideFarmOrderMutation,
   useGetProductQuery,
   useCreateProductMutation,
   useUpdateProductMutation,

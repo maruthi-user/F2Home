@@ -152,9 +152,9 @@ class F2HomeAuthServiceTest {
     }
 
     @Test
-    void registerVerifiesOtpCreatesActiveUserAndIssuesTokenPair() {
+    void registerVerifiesOtpCreatesAPendingApprovalFarmerAndIssuesTokenPair() {
         when(userRepository.existsByPhoneNumber(PHONE)).thenReturn(false);
-        when(draftRepository.findByPhoneNumber(PHONE)).thenReturn(Optional.of(draft()));
+        when(draftRepository.findByPhoneNumber(PHONE)).thenReturn(Optional.of(draft(F2HomeRole.FARMER)));
         when(passwordEncoder.encode("Secret@123")).thenReturn("bcrypt-hash");
         when(jwtService.generateToken(any(F2HomeUser.class))).thenReturn("access-token");
         when(jwtService.getExpirationTime()).thenReturn(900000L);
@@ -165,7 +165,8 @@ class F2HomeAuthServiceTest {
         ArgumentCaptor<F2HomeUser> captor = ArgumentCaptor.forClass(F2HomeUser.class);
         verify(userRepository).save(captor.capture());
         F2HomeUser saved = captor.getValue();
-        assertThat(saved.getStatus()).isEqualTo(F2HomeUserStatus.ACTIVE);
+        // Farmers wait for an admin to approve them before they go live.
+        assertThat(saved.getStatus()).isEqualTo(F2HomeUserStatus.PENDING_APPROVAL);
         assertThat(saved.isPhoneVerified()).isTrue();
         assertThat(saved.getRole()).isEqualTo(F2HomeRole.FARMER);
         assertThat(saved.getPasswordHash()).isEqualTo("bcrypt-hash");
@@ -184,12 +185,28 @@ class F2HomeAuthServiceTest {
         verify(refreshTokenRepository).save(any(RefreshToken.class));
     }
 
-    private F2HomeRegistrationDraft draft() {
+    @Test
+    void registerCreatesAnActiveCustomerStraightAway() {
+        when(userRepository.existsByPhoneNumber(PHONE)).thenReturn(false);
+        when(draftRepository.findByPhoneNumber(PHONE)).thenReturn(Optional.of(draft(F2HomeRole.CUSTOMER)));
+        when(passwordEncoder.encode("Secret@123")).thenReturn("bcrypt-hash");
+        when(jwtService.generateToken(any(F2HomeUser.class))).thenReturn("access-token");
+        when(jwtService.getExpirationTime()).thenReturn(900000L);
+
+        authService.register(PHONE, "123456", "joe@example.com", "Secret@123");
+
+        ArgumentCaptor<F2HomeUser> captor = ArgumentCaptor.forClass(F2HomeUser.class);
+        verify(userRepository).save(captor.capture());
+        // Customers have nothing for an admin to review, so they go live immediately.
+        assertThat(captor.getValue().getStatus()).isEqualTo(F2HomeUserStatus.ACTIVE);
+    }
+
+    private F2HomeRegistrationDraft draft(F2HomeRole role) {
         F2HomeRegistrationDraft draft = new F2HomeRegistrationDraft();
         draft.setPhoneNumber(PHONE);
         draft.setFullName("Farmer Joe");
         draft.setVillage("Rampur");
-        draft.setRole(F2HomeRole.FARMER);
+        draft.setRole(role);
         draft.setPhotoContentType("image/jpeg");
         draft.setPhotoBytes(JPEG_BYTES);
         draft.setPhotoSizeBytes(JPEG_BYTES.length);
@@ -222,6 +239,24 @@ class F2HomeAuthServiceTest {
 
         assertThat(response.accessToken()).isEqualTo("access-token");
         assertThat(user.getLastLoginAt()).isNotNull();
+    }
+
+    @Test
+    void loginAllowsAPendingApprovalFarmerButRejectsAnInactiveAccount() {
+        when(rateLimiter.tryLoginAttempt(PHONE)).thenReturn(true);
+        F2HomeUser pending = activeUser();
+        pending.setStatus(F2HomeUserStatus.PENDING_APPROVAL);
+        when(userRepository.findByPhoneNumber(PHONE)).thenReturn(Optional.of(pending));
+        when(passwordEncoder.matches("Secret@123", "bcrypt-hash")).thenReturn(true);
+        when(jwtService.generateToken(any(F2HomeUser.class))).thenReturn("access-token");
+        when(jwtService.getExpirationTime()).thenReturn(900000L);
+
+        assertThat(authService.login(PHONE, "Secret@123").accessToken()).isEqualTo("access-token");
+
+        pending.setStatus(F2HomeUserStatus.INACTIVE);
+        assertThatCode(() -> authService.login(PHONE, "Secret@123"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("inactive");
     }
 
     @Test

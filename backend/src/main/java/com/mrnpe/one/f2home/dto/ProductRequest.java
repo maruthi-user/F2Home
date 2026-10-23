@@ -1,6 +1,7 @@
 package com.mrnpe.one.f2home.dto;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -10,6 +11,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PastOrPresent;
 import jakarta.validation.constraints.Size;
 
 /**
@@ -47,6 +49,9 @@ public record ProductRequest(
         @NotNull(message = "Product location is required")
         @Valid
         LocationDto location,
+
+        @PastOrPresent(message = "Harvest date cannot be in the future")
+        LocalDate harvestDate,
 
         List<UUID> keepMediaIds
 ) {

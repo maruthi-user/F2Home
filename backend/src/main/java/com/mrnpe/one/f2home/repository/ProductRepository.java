@@ -22,6 +22,10 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     List<Product> findByFarmerIdAndStatusOrderByCreatedAtDesc(Long farmerId, ProductStatus status);
 
+    List<Product> findByStatusAndExpiresAtLessThanEqual(ProductStatus status, java.time.LocalDateTime cutoff);
+
+    List<Product> findByFarmerIdOrderByCreatedAtDesc(Long farmerId);
+
     List<Product> findByStatusOrderByCreatedAtDesc(ProductStatus status);
 
     List<Product> findByStatusAndCategoryOrderByCreatedAtDesc(ProductStatus status, String category);

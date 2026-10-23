@@ -55,6 +55,12 @@ import { ScrollArea } from '../../components/ui/scroll-area';
 import { apiSlice } from '../../redux/slices/apiSlice';
 import { selectCartCount } from '../../redux/slices/cartSlice';
 
+const FARMER_TABS = [
+  { label: "Marketplace", path: "/app/farm/marketplace" },
+  { label: "My Orders", path: "/app/farm/orders" },
+  { label: "My Farm", path: "/app/farm/history" },
+];
+
 export function TopNav() {
   const { theme, toggleTheme, toggleLauncher } = useLayout();
   const searchInputRef = useRef(null);
@@ -147,6 +153,30 @@ export function TopNav() {
           <F2HomeLogo className="h-full w-auto" showTagline={false} />
         </button>
       </div>
+
+      {/* Farmer modules: Marketplace (own listings) + My Farm (history) */}
+      {/* {user?.role === "FARMER" && (
+        <nav className="flex flex-1 items-center justify-center gap-1 px-2">
+          {FARMER_TABS.map((tab) => {
+            const active = location === tab.path || location.startsWith(`${tab.path}/`);
+            return (
+              // <button
+              //   key={tab.path}
+              //   type="button"
+              //   onClick={() => navigate(tab.path)}
+              //   className={cn(
+              //     "cursor-pointer rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+              //     active
+              //       ? "bg-[#e8f3dc] text-[#33691e]"
+              //       : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              //   )}
+              // >
+              //   {tab.label}
+              // </button>
+            );
+          })}
+        </nav>
+      )} */}
 
       {/* Center: Global Search */}
       {/* <div className="hidden md:block flex-1 max-w-2xl px-8">
