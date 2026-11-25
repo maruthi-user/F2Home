@@ -95,6 +95,33 @@ public class ProductService {
                 .toList();
     }
 
+    /** Browse using the farm pin independently of each listing pin. */
+    @Transactional(readOnly = true)
+    public List<ProductResponse> findDeliverable(double lat, double lng, String category) {
+        if (!Double.isFinite(lat) || !Double.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+            throw new BadRequestException("Enter a valid delivery location.");
+        }
+        Map<Long, FarmDelivery.Availability> available = new java.util.HashMap<>();
+        var today = FarmDelivery.today();
+        for (var farm : userRepository.findDeliveryFarms()) {
+            var delivery = FarmDelivery.check(farm.getLat(), farm.getLng(), farm.getDays(),
+                    farm.getRadius() == null ? props.getNearbyRadiusKm() : farm.getRadius(), lat, lng, today);
+            if (delivery.date() != null) available.put(farm.getId(), delivery);
+        }
+        if (available.isEmpty()) return List.of();
+        var products = productRepository.findActiveForDelivery(available.keySet(),
+                category == null || category.isBlank() ? null : category).stream()
+                .filter(this::isLive)
+                .sorted(Comparator.comparingDouble(p -> available.get(p.getFarmerId()).distanceKm()))
+                .toList();
+        var media = mediaFor(products.stream().map(Product::getId).toList());
+        return products.stream().map(p -> {
+            var delivery = available.get(p.getFarmerId());
+            return ProductResponse.from(p, media.getOrDefault(p.getId(), List.of()),
+                    round1(delivery.distanceKm()), delivery.date());
+        }).toList();
+    }
+
     /** All active listings (farmer / admin view - no radius). */
     @Transactional(readOnly = true)
     public List<ProductResponse> findAll(String category) {

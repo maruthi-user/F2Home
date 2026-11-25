@@ -29,7 +29,8 @@ public record PlaceOrderRequest(
         Address address,
 
         @NotNull(message = "Payment method is required")
-        PaymentMethod paymentMethod
+        PaymentMethod paymentMethod,
+        @Size(max = 64) String quoteVersion
 ) {
     public record Line(
             @NotNull(message = "Product is required") Long productId,

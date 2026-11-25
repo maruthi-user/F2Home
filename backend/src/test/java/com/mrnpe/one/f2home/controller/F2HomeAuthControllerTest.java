@@ -31,6 +31,7 @@ import com.mrnpe.one.f2home.dto.UserResponse;
 import com.mrnpe.one.f2home.entity.F2HomeRole;
 import com.mrnpe.one.f2home.entity.F2HomeUserStatus;
 import com.mrnpe.one.f2home.exception.RateLimitException;
+import com.mrnpe.one.f2home.exception.SmsUnavailableException;
 import com.mrnpe.one.f2home.service.F2HomeAuthService;
 
 /**
@@ -215,6 +216,26 @@ class F2HomeAuthControllerTest {
                 .andExpect(jsonPath("$.message").value("Logged out successfully."));
 
         verify(authService).logout("raw-token");
+    }
+
+    @Test
+    void forgotPasswordShowsGlobalSmsUnavailability() throws Exception {
+        doThrow(new SmsUnavailableException(false)).when(authService).forgotPassword(anyString());
+        mockMvc.perform(post("/api/f2home/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"+919876543210\"}"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.message").value("SMS verification is temporarily unavailable. Please try again later."));
+    }
+
+    @Test
+    void forgotPasswordKeepsTheGenericResponseWhenDeliveryFails() throws Exception {
+        doThrow(new SmsUnavailableException(true)).when(authService).forgotPassword(anyString());
+        mockMvc.perform(post("/api/f2home/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"+919876543210\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("If the phone number is registered and SMS delivery is available, you’ll receive an OTP."));
     }
 
     @Test

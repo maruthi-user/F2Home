@@ -6,6 +6,7 @@ import javax.crypto.SecretKey;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import com.mrnpe.one.f2home.repository.F2HomeUserRepository;
 
 import com.mrnpe.one.f2home.entity.F2HomeRole;
 import com.mrnpe.one.f2home.entity.F2HomeUser;
@@ -23,6 +24,12 @@ import io.jsonwebtoken.security.Keys;
 @Service
 public class F2HomeJwtService {
 
+    private final F2HomeUserRepository users;
+
+    public F2HomeJwtService(F2HomeUserRepository users) {
+        this.users = users;
+    }
+
     @Value("${f2home.jwt.secret-key}")
     private String secretKey;
 
@@ -37,6 +44,7 @@ public class F2HomeJwtService {
         return Jwts.builder()
                 .subject(user.getPhoneNumber())
                 .claim("uid", user.getId())
+                .claim("sv", user.getSessionVersion())
                 .claim("role", user.getRole().name())
                 .claim("fullName", user.getFullName())
                 .issuedAt(new Date(System.currentTimeMillis()))
@@ -69,6 +77,12 @@ public class F2HomeJwtService {
 
             Object uidRaw = claims.get("uid");
             Long uid = uidRaw instanceof Number number ? number.longValue() : null;
+
+            Object version = claims.get("sv");
+            long sessionVersion = version instanceof Number number ? number.longValue() : 0;
+            if (uid == null || users.findActiveSessionVersion(uid).filter(v -> v == sessionVersion).isEmpty()) {
+                return null;
+            }
 
             return new F2HomeUserPrincipal(
                     uid,

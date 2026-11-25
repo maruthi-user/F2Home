@@ -52,12 +52,14 @@ public class ProductController {
             @RequestParam(required = false) Double lat,
             @RequestParam(required = false) Double lng,
             @RequestParam(required = false) String category,
-            @RequestParam(required = false) List<Long> ids) {
+            @RequestParam(required = false) List<Long> ids,
+            @RequestParam(defaultValue = "false") boolean deliveryAware) {
         if (ids != null && !ids.isEmpty()) {
             return ResponseEntity.ok(productService.findByIds(ids));
         }
         if (lat != null && lng != null) {
-            return ResponseEntity.ok(productService.findNearby(lat, lng, category));
+            return ResponseEntity.ok(deliveryAware ? productService.findDeliverable(lat, lng, category)
+                    : productService.findNearby(lat, lng, category));
         }
         if (user.role() == F2HomeRole.CUSTOMER) {
             throw new BadRequestException("Set your location (lat, lng) to see nearby produce.");

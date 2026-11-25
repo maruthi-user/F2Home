@@ -217,7 +217,7 @@ class F2HomeAuthServiceTest {
     void loginRejectsBadPassword() {
         when(rateLimiter.tryLoginAttempt(PHONE)).thenReturn(true);
         F2HomeUser user = activeUser();
-        when(userRepository.findByPhoneNumber(PHONE)).thenReturn(Optional.of(user));
+        when(userRepository.findOneByPhoneNumber(PHONE)).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("wrong", "bcrypt-hash")).thenReturn(false);
 
         assertThatCode(() -> authService.login(PHONE, "wrong"))
@@ -227,10 +227,21 @@ class F2HomeAuthServiceTest {
     }
 
     @Test
+    void usernameLoginNormalizesCaseAndSharesThePhoneAttemptLimit() {
+        when(rateLimiter.tryLoginAttempt("testfarmer")).thenReturn(true);
+        when(userRepository.findByUsernameIgnoreCase("testfarmer")).thenReturn(Optional.of(activeUser()));
+        when(rateLimiter.tryLoginAttempt(PHONE)).thenReturn(false);
+
+        assertThatCode(() -> authService.loginWithUsername("TestFarmer", "Secret@123"))
+                .isInstanceOf(com.mrnpe.one.f2home.exception.RateLimitException.class);
+        verify(passwordEncoder, never()).matches(anyString(), anyString());
+    }
+
+    @Test
     void loginSucceedsAndUpdatesLastLogin() {
         when(rateLimiter.tryLoginAttempt(PHONE)).thenReturn(true);
         F2HomeUser user = activeUser();
-        when(userRepository.findByPhoneNumber(PHONE)).thenReturn(Optional.of(user));
+        when(userRepository.findOneByPhoneNumber(PHONE)).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("Secret@123", "bcrypt-hash")).thenReturn(true);
         when(jwtService.generateToken(any(F2HomeUser.class))).thenReturn("access-token");
         when(jwtService.getExpirationTime()).thenReturn(900000L);
@@ -246,7 +257,7 @@ class F2HomeAuthServiceTest {
         when(rateLimiter.tryLoginAttempt(PHONE)).thenReturn(true);
         F2HomeUser pending = activeUser();
         pending.setStatus(F2HomeUserStatus.PENDING_APPROVAL);
-        when(userRepository.findByPhoneNumber(PHONE)).thenReturn(Optional.of(pending));
+        when(userRepository.findOneByPhoneNumber(PHONE)).thenReturn(Optional.of(pending));
         when(passwordEncoder.matches("Secret@123", "bcrypt-hash")).thenReturn(true);
         when(jwtService.generateToken(any(F2HomeUser.class))).thenReturn("access-token");
         when(jwtService.getExpirationTime()).thenReturn(900000L);
@@ -265,7 +276,7 @@ class F2HomeAuthServiceTest {
         // service must look the account up by its stored E.164 form.
         when(rateLimiter.tryLoginAttempt(PHONE)).thenReturn(true);
         F2HomeUser user = activeUser();
-        when(userRepository.findByPhoneNumber(PHONE)).thenReturn(Optional.of(user));
+        when(userRepository.findOneByPhoneNumber(PHONE)).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("Secret@123", "bcrypt-hash")).thenReturn(true);
         when(jwtService.generateToken(any(F2HomeUser.class))).thenReturn("access-token");
         when(jwtService.getExpirationTime()).thenReturn(900000L);
@@ -274,7 +285,7 @@ class F2HomeAuthServiceTest {
 
         assertThat(response.accessToken()).isEqualTo("access-token");
         assertThat(response.user().phoneNumber()).isEqualTo(PHONE);
-        verify(userRepository, never()).findByPhoneNumber("98765 43210");
+        verify(userRepository, never()).findOneByPhoneNumber("98765 43210");
     }
 
     @Test
@@ -282,7 +293,7 @@ class F2HomeAuthServiceTest {
         assertThatCode(() -> authService.login("12345", "Secret@123"))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("valid mobile number");
-        verify(userRepository, never()).findByPhoneNumber(any());
+        verify(userRepository, never()).findOneByPhoneNumber(any());
     }
 
     @Test
@@ -292,9 +303,10 @@ class F2HomeAuthServiceTest {
         stored.setTokenHash("hash-of-raw");
         stored.setExpiresAt(LocalDateTime.now().plusDays(1));
         stored.setRevoked(false);
+        when(refreshTokenRepository.findUserIdByHash(anyString())).thenReturn(Optional.of(1L));
         when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(stored));
         F2HomeUser user = activeUser();
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userRepository.lockForCheckout(1L)).thenReturn(Optional.of(user));
         when(jwtService.generateToken(any(F2HomeUser.class))).thenReturn("new-access");
         when(jwtService.getExpirationTime()).thenReturn(900000L);
 
@@ -314,8 +326,10 @@ class F2HomeAuthServiceTest {
         stored.setTokenHash("hash");
         stored.setExpiresAt(LocalDateTime.now().plusDays(1));
         stored.setRevoked(true);
+        when(refreshTokenRepository.findUserIdByHash(anyString())).thenReturn(Optional.of(1L));
         when(refreshTokenRepository.findByTokenHash(anyString())).thenReturn(Optional.of(stored));
 
+        when(userRepository.lockForCheckout(1L)).thenReturn(Optional.of(activeUser()));
         assertThatCode(() -> authService.refresh("raw-token"))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("already refreshed or revoked");
@@ -323,7 +337,7 @@ class F2HomeAuthServiceTest {
 
     @Test
     void resetPasswordVerifiesOtpAndRevokesAllRefreshTokens() {
-        when(userRepository.findByPhoneNumber(PHONE)).thenReturn(Optional.of(activeUser()));
+        when(userRepository.findOneByPhoneNumber(PHONE)).thenReturn(Optional.of(activeUser()));
         when(passwordEncoder.encode("NewSecret@123")).thenReturn("new-hash");
 
         authService.resetPassword(PHONE, "654321", "NewSecret@123", "NewSecret@123");

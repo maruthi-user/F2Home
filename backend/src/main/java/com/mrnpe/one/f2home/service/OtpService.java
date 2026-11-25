@@ -3,12 +3,17 @@ package com.mrnpe.one.f2home.service;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Optional;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.mrnpe.one.exception.BadRequestException;
+import com.mrnpe.one.f2home.exception.OtpVerificationException;
+import com.mrnpe.one.f2home.exception.SmsUnavailableException;
 import com.mrnpe.one.f2home.entity.OtpPurpose;
 import com.mrnpe.one.f2home.entity.OtpVerification;
 import com.mrnpe.one.f2home.repository.OtpVerificationRepository;
@@ -23,24 +28,31 @@ import com.mrnpe.one.f2home.repository.OtpVerificationRepository;
 @Service
 public class OtpService {
 
+    private static final Logger log = LoggerFactory.getLogger(OtpService.class);
     static final Duration OTP_VALIDITY = Duration.ofMinutes(10);
     static final int MAX_ATTEMPTS = 5;
 
     private final OtpVerificationRepository otpRepository;
-    private final SmsSender smsSender;
+    private final Optional<SmsSender> smsSender;
     private final PasswordEncoder passwordEncoder;
     private final SecureRandom random = new SecureRandom();
 
     public OtpService(OtpVerificationRepository otpRepository,
-                      SmsSender smsSender,
+                      Optional<SmsSender> smsSender,
                       PasswordEncoder passwordEncoder) {
         this.otpRepository = otpRepository;
         this.smsSender = smsSender;
         this.passwordEncoder = passwordEncoder;
     }
 
+    public void requireSmsAvailable() {
+        if (smsSender.isEmpty()) throw new SmsUnavailableException(false);
+    }
+
     @Transactional
     public void generateAndSendOtp(String phoneNumber, OtpPurpose purpose) {
+        SmsSender sender = smsSender.orElseThrow(() -> new SmsUnavailableException(false));
+
         // Invalidate any previous outstanding OTP for this phone + purpose.
         otpRepository.findByPhoneNumberAndPurposeAndConsumedFalse(phoneNumber, purpose)
                 .ifPresent(existing -> {
@@ -59,33 +71,37 @@ public class OtpService {
         record.setConsumed(false);
         otpRepository.save(record);
 
-        smsSender.sendSms(phoneNumber,
-                "Your F2Home verification code is " + otp
-                        + ". It is valid for 10 minutes. Do not share it with anyone.");
+        try {
+            sender.sendSms(phoneNumber, "Your F2Home verification code is " + otp
+                    + ". It is valid for 10 minutes. Do not share it with anyone.");
+        } catch (RuntimeException e) {
+            log.warn("OTP delivery failed for purpose {}", purpose);
+            throw new SmsUnavailableException(true);
+        }
     }
 
     /**
      * Verifies the OTP for the given phone + purpose. Marks it consumed on
-     * success. Throws {@link BadRequestException} on expiry, exhaustion of
+     * success. Throws {@link OtpVerificationException} on expiry, exhaustion of
      * attempts, or a wrong code (each wrong entry counts as an attempt).
      */
-    @Transactional
+    @Transactional(noRollbackFor = OtpVerificationException.class)
     public void verifyOtp(String phoneNumber, OtpPurpose purpose, String otp) {
         OtpVerification record = otpRepository
                 .findTopByPhoneNumberAndPurposeAndConsumedFalseOrderByCreatedAtDesc(phoneNumber, purpose)
-                .orElseThrow(() -> new BadRequestException(
+                .orElseThrow(() -> new OtpVerificationException(
                         "No active OTP found for this phone number. Please request a new one."));
 
         if (record.getExpiresAt().isBefore(LocalDateTime.now())) {
             record.setConsumed(true);
             otpRepository.save(record);
-            throw new BadRequestException("This OTP has expired. Please request a new one.");
+            throw new OtpVerificationException("This OTP has expired. Please request a new one.");
         }
 
         if (record.getAttempts() >= MAX_ATTEMPTS) {
             record.setConsumed(true);
             otpRepository.save(record);
-            throw new BadRequestException(
+            throw new OtpVerificationException(
                     "Too many incorrect attempts. Please request a new OTP.");
         }
 
@@ -95,12 +111,12 @@ public class OtpService {
             otpRepository.save(record);
             int remaining = MAX_ATTEMPTS - record.getAttempts();
             if (remaining > 0) {
-                throw new BadRequestException("Invalid OTP. " + remaining
+                throw new OtpVerificationException("Invalid OTP. " + remaining
                         + (remaining == 1 ? " attempt" : " attempts") + " remaining.");
             }
             record.setConsumed(true);
             otpRepository.save(record);
-            throw new BadRequestException("Invalid OTP. Please request a new one.");
+            throw new OtpVerificationException("Invalid OTP. Please request a new one.");
         }
 
         record.setConsumed(true);

@@ -18,6 +18,7 @@ import com.mrnpe.one.f2home.dto.RefreshTokenRequest;
 import com.mrnpe.one.f2home.dto.RegisterOtpRequest;
 import com.mrnpe.one.f2home.dto.RegisterVerifyRequest;
 import com.mrnpe.one.f2home.dto.ResetPasswordRequest;
+import com.mrnpe.one.f2home.exception.SmsUnavailableException;
 import com.mrnpe.one.f2home.service.F2HomeAuthService;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -87,11 +88,17 @@ public class F2HomeAuthController {
     // ================= FORGOT PASSWORD (SENDS OTP) =================
     @PostMapping("/forgot-password")
     public ResponseEntity<MessageResponse> forgotPassword(@RequestBody @Valid ForgotPasswordRequest request) {
-        authService.forgotPassword(request.phoneNumber());
+        try {
+            authService.forgotPassword(request.phoneNumber());
+        } catch (SmsUnavailableException e) {
+            // Provider failure is account-dependent. Respond the same way as for an unknown number
+            // after the service transaction rolls back. Global unavailability is safe to expose.
+            if (!e.isDeliveryFailure()) throw e;
+        }
         // Same response either way so the endpoint can't be used to probe
         // which phone numbers are registered.
         return ResponseEntity.ok(new MessageResponse(
-                "If the phone number is registered, an OTP has been sent to it."));
+                "If the phone number is registered and SMS delivery is available, you’ll receive an OTP."));
     }
 
     // ================= RESET PASSWORD (OTP-DRIVEN) =================

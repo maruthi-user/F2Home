@@ -43,6 +43,12 @@ public class FarmProfileService {
 
     @Transactional
     public FarmProfileResponse update(F2HomeUserPrincipal farmer, FarmProfileRequest request) {
+        F2HomeUser user = findFarmer(farmer.id());
+        apply(user, request);
+        return FarmProfileResponse.from(userRepository.save(user), props.getNearbyRadiusKm());
+    }
+
+    void apply(F2HomeUser user, FarmProfileRequest request) {
         double maxRadius = props.getNearbyRadiusKm();
         if (request.deliveryRadiusKm() > maxRadius) {
             throw new BadRequestException("Delivery radius cannot exceed " + (long) maxRadius + " km.");
@@ -55,14 +61,12 @@ public class FarmProfileService {
             }
         }
 
-        F2HomeUser user = findFarmer(farmer.id());
         user.setFarmLat(request.lat());
         user.setFarmLng(request.lng());
         user.setFarmLocationLabel(request.locationLabel().trim());
         user.setDeliveryRadiusKm(request.deliveryRadiusKm());
         user.setDeliveryDays(days.stream().distinct().collect(Collectors.joining(",")));
 
-        return FarmProfileResponse.from(userRepository.save(user), maxRadius);
     }
 
     private F2HomeUser findFarmer(Long id) {

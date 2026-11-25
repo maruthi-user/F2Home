@@ -1,9 +1,12 @@
 package com.mrnpe.one.f2home.entity;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -36,6 +39,12 @@ public class MarketplaceOrder {
     @Column(name = "customer_id", nullable = false)
     private Long customerId;
 
+    @Column(name = "idempotency_key")
+    private UUID idempotencyKey;
+
+    @Column(name = "request_fingerprint", length = 64)
+    private String requestFingerprint;
+
     @Column(name = "customer_name", nullable = false)
     private String customerName;
 
@@ -46,6 +55,13 @@ public class MarketplaceOrder {
     @Column(name = "status", nullable = false, length = 20)
     private OrderStatus status = OrderStatus.PLACED;
 
+    @Column(name = "response_deadline")
+    private Instant responseDeadline;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "closure_reason", length = 32)
+    private OrderClosureReason closureReason;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "payment_method", nullable = false, length = 20)
     private PaymentMethod paymentMethod;
@@ -54,11 +70,20 @@ public class MarketplaceOrder {
     @Column(name = "payment_status", nullable = false, length = 20)
     private PaymentStatus paymentStatus;
 
+    @Column(name = "cash_collected", precision = 12, scale = 2)
+    private BigDecimal cashCollected;
+
     @Column(name = "item_count", nullable = false)
     private int itemCount;
 
     @Column(name = "subtotal", nullable = false, precision = 12, scale = 2)
     private BigDecimal subtotal;
+
+    @Column(name = "delivery_fee", nullable = false, precision = 12, scale = 2)
+    private BigDecimal deliveryFee = BigDecimal.ZERO;
+
+    @Column(name = "delivery_date")
+    private LocalDate deliveryDate;
 
     @Column(name = "total", nullable = false, precision = 12, scale = 2)
     private BigDecimal total;
@@ -104,6 +129,11 @@ public class MarketplaceOrder {
     @OrderBy("id ASC")
     private List<OrderItem> items = new ArrayList<>();
 
+    @OneToMany(cascade = CascadeType.ALL)
+    @JoinColumn(name = "order_id", nullable = false)
+    @OrderBy("id ASC")
+    private List<OrderEvent> events = new ArrayList<>();
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
@@ -122,12 +152,29 @@ public class MarketplaceOrder {
     }
 
     public Long getId() { return id; }
+    public void setIdempotencyKey(UUID idempotencyKey) { this.idempotencyKey = idempotencyKey; }
+    public String getRequestFingerprint() { return requestFingerprint; }
+    public void setRequestFingerprint(String requestFingerprint) { this.requestFingerprint = requestFingerprint; }
+
     public Long getCustomerId() { return customerId; }
     public void setCustomerId(Long customerId) { this.customerId = customerId; }
     public String getCustomerName() { return customerName; }
     public void setCustomerName(String customerName) { this.customerName = customerName; }
     public String getCustomerPhone() { return customerPhone; }
     public void setCustomerPhone(String customerPhone) { this.customerPhone = customerPhone; }
+    public Instant getResponseDeadline() { return responseDeadline; }
+    public void setResponseDeadline(Instant responseDeadline) { this.responseDeadline = responseDeadline; }
+    public OrderClosureReason getClosureReason() { return closureReason; }
+    public void setClosureReason(OrderClosureReason closureReason) { this.closureReason = closureReason; }
+
+    public void recordStatus(OrderStatus status, String note) {
+        setStatus(status);
+        events.add(new OrderEvent(status, Instant.now(), note));
+    }
+    public List<OrderEvent> getEvents() { return events; }
+    public BigDecimal getCashCollected() { return cashCollected; }
+    public void setCashCollected(BigDecimal cashCollected) { this.cashCollected = cashCollected; }
+
     public OrderStatus getStatus() { return status; }
     public void setStatus(OrderStatus status) { this.status = status; }
     public PaymentMethod getPaymentMethod() { return paymentMethod; }
@@ -136,6 +183,11 @@ public class MarketplaceOrder {
     public void setPaymentStatus(PaymentStatus paymentStatus) { this.paymentStatus = paymentStatus; }
     public int getItemCount() { return itemCount; }
     public void setItemCount(int itemCount) { this.itemCount = itemCount; }
+    public BigDecimal getDeliveryFee() { return deliveryFee; }
+    public void setDeliveryFee(BigDecimal deliveryFee) { this.deliveryFee = deliveryFee; }
+    public LocalDate getDeliveryDate() { return deliveryDate; }
+    public void setDeliveryDate(LocalDate deliveryDate) { this.deliveryDate = deliveryDate; }
+
     public BigDecimal getSubtotal() { return subtotal; }
     public void setSubtotal(BigDecimal subtotal) { this.subtotal = subtotal; }
     public BigDecimal getTotal() { return total; }

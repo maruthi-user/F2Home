@@ -30,6 +30,16 @@ public class MarketplaceProperties {
     @Value("${f2home.marketplace.max-video-bytes:26214400}")
     private long maxVideoBytes;
 
+    @Value("${f2home.marketplace.delivery-fee:0}")
+    private BigDecimal deliveryFee = BigDecimal.ZERO;
+
+    @Value("${f2home.marketplace.farmer-response-minutes:120}")
+    private long farmerResponseMinutes = 120;
+
+    public long getFarmerResponseMinutes() { return farmerResponseMinutes; }
+
+    public BigDecimal getDeliveryFee() { return deliveryFee; }
+
     /** Perishables auto-expire this many hours after listing. */
     @Value("${f2home.marketplace.perishable-expiry-hours:48}")
     private int perishableExpiryHours = 48;

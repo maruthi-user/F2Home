@@ -25,6 +25,7 @@ import com.mrnpe.one.f2home.entity.F2HomeUser;
 import com.mrnpe.one.f2home.entity.F2HomeUserStatus;
 import com.mrnpe.one.f2home.entity.OtpPurpose;
 import com.mrnpe.one.f2home.entity.RefreshToken;
+import com.mrnpe.one.f2home.exception.OtpVerificationException;
 import com.mrnpe.one.f2home.repository.F2HomeRegistrationDraftRepository;
 import com.mrnpe.one.f2home.repository.F2HomeUserRepository;
 import com.mrnpe.one.f2home.repository.RefreshTokenRepository;
@@ -93,6 +94,7 @@ public class F2HomeAuthService {
         if (village == null || village.isBlank()) {
             throw new BadRequestException("Village is required.");
         }
+        otpService.requireSmsAvailable();
         if (userRepository.existsByPhoneNumber(phoneNumber)) {
             throw new IllegalStateException(
                     "An account already exists for this phone number. Please log in instead.");
@@ -120,7 +122,7 @@ public class F2HomeAuthService {
 
     // ================= REGISTRATION: STEP 2 — VERIFY + CREATE =================
 
-    @Transactional
+    @Transactional(noRollbackFor = OtpVerificationException.class)
     public AuthResponse register(String rawPhoneNumber, String otp, String email, String password) {
         String phoneNumber = PhoneNumbers.normalize(rawPhoneNumber);
         if (userRepository.existsByPhoneNumber(phoneNumber)) {
@@ -168,14 +170,29 @@ public class F2HomeAuthService {
 
     @Transactional
     public AuthResponse login(String rawPhoneNumber, String password) {
-        String phoneNumber = PhoneNumbers.normalize(rawPhoneNumber);
-        if (!rateLimiter.tryLoginAttempt(phoneNumber)) {
+        String phone = PhoneNumbers.normalize(rawPhoneNumber);
+        return authenticate(phone, password, false);
+    }
+
+    @Transactional
+    public AuthResponse loginWithUsername(String username, String password) {
+        return authenticate(username.toLowerCase(java.util.Locale.ROOT), password, true);
+    }
+
+    private AuthResponse authenticate(String identifier, String password, boolean username) {
+        if (!rateLimiter.tryLoginAttempt(identifier)) {
             throw new com.mrnpe.one.f2home.exception.RateLimitException(
                     "Too many login attempts. Please try again in 15 minutes.");
         }
 
-        F2HomeUser user = userRepository.findByPhoneNumber(phoneNumber)
-                .orElseThrow(() -> new BadRequestException("Invalid phone number or password."));
+        String error = username ? "Invalid username or password." : "Invalid phone number or password.";
+        F2HomeUser user = (username ? userRepository.findByUsernameIgnoreCase(identifier)
+                : userRepository.findOneByPhoneNumber(identifier))
+                .orElseThrow(() -> new BadRequestException(error));
+        if (username && !rateLimiter.tryLoginAttempt(user.getPhoneNumber())) {
+            throw new com.mrnpe.one.f2home.exception.RateLimitException(
+                    "Too many login attempts. Please try again in 15 minutes.");
+        }
 
         // PENDING_APPROVAL farmers can still log in (and list produce) while
         // they wait - only a rejected/suspended (INACTIVE) account is blocked.
@@ -185,7 +202,7 @@ public class F2HomeAuthService {
         }
 
         if (!passwordEncoder.matches(password, user.getPasswordHash())) {
-            throw new BadRequestException("Invalid phone number or password.");
+            throw new BadRequestException(error);
         }
 
         user.setLastLoginAt(LocalDateTime.now());
@@ -198,8 +215,14 @@ public class F2HomeAuthService {
 
     @Transactional
     public AuthResponse refresh(String rawRefreshToken) {
+        String hash = sha256Hex(rawRefreshToken);
+        Long userId = refreshTokenRepository.findUserIdByHash(hash)
+                .orElseThrow(() -> new BadRequestException("Invalid refresh token. Please log in again."));
+        F2HomeUser user = userRepository.lockForCheckout(userId)
+                .filter(account -> account.getStatus() != F2HomeUserStatus.INACTIVE)
+                .orElseThrow(() -> new BadRequestException("Account unavailable. Please log in again."));
         RefreshToken stored = refreshTokenRepository
-                .findByTokenHash(sha256Hex(rawRefreshToken))
+                .findByTokenHash(hash)
                 .orElseThrow(() -> new BadRequestException(
                         "Invalid refresh token. Please log in again."));
 
@@ -217,10 +240,6 @@ public class F2HomeAuthService {
         // Rotate: revoke the presented token, issue a fresh pair.
         stored.setRevoked(true);
         refreshTokenRepository.save(stored);
-
-        F2HomeUser user = userRepository.findById(stored.getUserId())
-                .orElseThrow(() -> new BadRequestException(
-                        "Account no longer exists. Please log in again."));
 
         return issueTokenPair(user);
     }
@@ -241,31 +260,33 @@ public class F2HomeAuthService {
     @Transactional
     public void forgotPassword(String rawPhoneNumber) {
         String phoneNumber = PhoneNumbers.normalize(rawPhoneNumber);
+        otpService.requireSmsAvailable();
+        rateLimiter.assertOtpRequestAllowed(phoneNumber, "password-reset");
         boolean exists = userRepository.existsByPhoneNumber(phoneNumber);
         if (!exists) {
             // Deliberately silent: don't reveal whether the number is registered.
             return;
         }
-        rateLimiter.assertOtpRequestAllowed(phoneNumber, "password-reset");
         otpService.generateAndSendOtp(phoneNumber, OtpPurpose.PASSWORD_RESET);
     }
 
     // ================= RESET PASSWORD =================
 
-    @Transactional
+    @Transactional(noRollbackFor = OtpVerificationException.class)
     public void resetPassword(String rawPhoneNumber, String otp, String newPassword, String confirmPassword) {
         String phoneNumber = PhoneNumbers.normalize(rawPhoneNumber);
         if (!newPassword.equals(confirmPassword)) {
             throw new BadRequestException("Passwords do not match.");
         }
 
-        F2HomeUser user = userRepository.findByPhoneNumber(phoneNumber)
+        F2HomeUser user = userRepository.findOneByPhoneNumber(phoneNumber)
                 .orElseThrow(() -> new BadRequestException(
-                        "No account found for this phone number."));
+                        "No active OTP found for this phone number. Please request a new one."));
 
         otpService.verifyOtp(phoneNumber, OtpPurpose.PASSWORD_RESET, otp);
 
         user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.invalidateSessions();
         userRepository.save(user);
 
         // Password changed: every outstanding session (refresh token) dies now.

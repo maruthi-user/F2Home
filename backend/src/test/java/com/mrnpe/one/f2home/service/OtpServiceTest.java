@@ -9,6 +9,7 @@ import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
@@ -25,6 +26,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import com.mrnpe.one.exception.BadRequestException;
 import com.mrnpe.one.f2home.entity.OtpPurpose;
 import com.mrnpe.one.f2home.entity.OtpVerification;
+import com.mrnpe.one.f2home.exception.SmsUnavailableException;
 import com.mrnpe.one.f2home.repository.OtpVerificationRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -43,9 +45,19 @@ class OtpServiceTest {
 
     @BeforeEach
     void setUp() {
-        otpService = new OtpService(otpRepository, smsSender, passwordEncoder);
+        otpService = new OtpService(otpRepository, Optional.of(smsSender), passwordEncoder);
         lenient().when(otpRepository.save(any(OtpVerification.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
+    }
+
+    @Test
+    void skipsOtpCreationWhenNoSmsGatewayIsConfigured() {
+        var service = new OtpService(otpRepository, Optional.empty(), passwordEncoder);
+
+        assertThatCode(() -> service.generateAndSendOtp(PHONE, OtpPurpose.REGISTRATION))
+                .isInstanceOf(SmsUnavailableException.class)
+                .hasMessageContaining("temporarily unavailable");
+        verifyNoInteractions(otpRepository, passwordEncoder);
     }
 
     @Test

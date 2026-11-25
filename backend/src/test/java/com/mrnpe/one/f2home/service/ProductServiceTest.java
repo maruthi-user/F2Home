@@ -146,6 +146,32 @@ class ProductServiceTest {
     }
 
     @Test
+    void deliverableListingsUseFarmPinAndIncludeNextDeliveryDate() {
+        var farm = deliveryFarm(1L, 16.3, 20.0);
+        var outside = deliveryFarm(2L, 16.6, 20.0);
+        when(userRepository.findDeliveryFarms()).thenReturn(List.of(farm, outside));
+        when(productRepository.findActiveForDelivery(Set.of(1L), null))
+                .thenReturn(List.of(at(1L, "Rice", 17.0, 81.0, 1L)));
+
+        var result = service.findDeliverable(16.3, 80.44, null);
+
+        assertThat(result).singleElement().satisfies(product -> {
+            assertThat(product.distanceKm()).isZero();
+            assertThat(product.nextDeliveryDate()).isEqualTo(FarmDelivery.today().plusDays(1));
+        });
+    }
+
+    private F2HomeUserRepository.DeliveryFarm deliveryFarm(long id, double lat, double radius) {
+        var farm = org.mockito.Mockito.mock(F2HomeUserRepository.DeliveryFarm.class);
+        lenient().when(farm.getId()).thenReturn(id);
+        when(farm.getLat()).thenReturn(lat);
+        when(farm.getLng()).thenReturn(80.44);
+        when(farm.getRadius()).thenReturn(radius);
+        when(farm.getDays()).thenReturn("MON,TUE,WED,THU,FRI,SAT,SUN");
+        return farm;
+    }
+
+    @Test
     void getHidesAListingFromAFarmerWhoIsNotApproved() {
         Product pending = at(8L, "Okra", 16.3, 80.44, 2L); // Lakshmi: not approved yet
         when(productRepository.findByIdAndStatus(8L, ProductStatus.ACTIVE)).thenReturn(Optional.of(pending));

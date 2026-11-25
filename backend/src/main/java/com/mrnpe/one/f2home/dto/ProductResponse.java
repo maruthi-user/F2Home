@@ -28,6 +28,7 @@ public record ProductResponse(
         String farmerName,
         List<MediaResponse> media,
         Double distanceKm,
+        LocalDate nextDeliveryDate,
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
         LocalDate harvestDate,
@@ -53,6 +54,10 @@ public record ProductResponse(
     }
 
     public static ProductResponse from(Product p, List<ProductMediaMeta> media, Double distanceKm) {
+        return from(p, media, distanceKm, null);
+    }
+
+    public static ProductResponse from(Product p, List<ProductMediaMeta> media, Double distanceKm, LocalDate nextDeliveryDate) {
         return new ProductResponse(
                 p.getId(),
                 p.getName(),
@@ -66,6 +71,7 @@ public record ProductResponse(
                 p.getFarmerName(),
                 media.stream().map(MediaResponse::from).toList(),
                 distanceKm,
+                nextDeliveryDate,
                 p.getCreatedAt(),
                 p.getUpdatedAt(),
                 p.getHarvestDate(),

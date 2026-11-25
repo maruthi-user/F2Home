@@ -46,6 +46,9 @@ public class FarmOrderService {
     public FarmOrderRow decide(F2HomeUserPrincipal farmer, Long itemId, boolean accept) {
         MarketplaceOrder order = orderRepository.findByItemId(itemId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found."));
+        if (order.getResponseDeadline() != null || order.getStatus() != OrderStatus.PLACED) {
+            throw new BadRequestException("This item is no longer awaiting an individual response.");
+        }
         OrderItem item = order.getItems().stream().filter(i -> i.getId().equals(itemId)).findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found."));
         if (!item.getFarmerId().equals(farmer.id())) {
@@ -77,7 +80,8 @@ public class FarmOrderService {
                 .setScale(2, RoundingMode.HALF_UP);
         order.setItemCount(kept.stream().mapToInt(OrderItem::getQuantity).sum());
         order.setSubtotal(subtotal);
-        order.setTotal(subtotal);
+        if (kept.isEmpty()) order.setDeliveryFee(BigDecimal.ZERO.setScale(2));
+        order.setTotal(subtotal.add(order.getDeliveryFee()));
 
         if (kept.isEmpty()) {
             order.setStatus(OrderStatus.CANCELLED);

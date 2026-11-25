@@ -13,6 +13,9 @@ import com.mrnpe.one.f2home.entity.RefreshToken;
 @Repository
 public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long> {
 
+    @Query("select r.userId from RefreshToken r where r.tokenHash = :hash")
+    Optional<Long> findUserIdByHash(@Param("hash") String hash);
+
     Optional<RefreshToken> findByTokenHash(String tokenHash);
 
     /**

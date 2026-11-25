@@ -5,6 +5,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,12 +21,21 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 
 import com.mrnpe.one.f2home.exception.RateLimitException;
+import com.mrnpe.one.f2home.exception.SmsUnavailableException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler(SmsUnavailableException.class)
+    public ResponseEntity<Map<String, Object>> handleSmsUnavailable(SmsUnavailableException ex) {
+        return buildResponse(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+    }
 
     @ExceptionHandler(RateLimitException.class)
     public ResponseEntity<Map<String, Object>> handleRateLimit(RateLimitException ex) {
@@ -133,7 +144,11 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, Object>> handleGeneric(Exception ex) {
+    public ResponseEntity<Map<String, Object>> handleGeneric(Exception ex, HttpServletRequest request) {
+        if (request.getRequestURI().startsWith(request.getContextPath() + "/api/f2home/auth/")) {
+            log.error("Unexpected authentication error ({})", ex.getClass().getSimpleName());
+            return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Authentication could not be completed.");
+        }
         ex.printStackTrace(); // replace with logger later
         return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR,ex.getMessage() );
     }

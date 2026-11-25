@@ -49,6 +49,16 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
                                   @Param("maxLng") double maxLng,
                                   @Param("category") String category);
 
+    @Query("""
+            select p from Product p
+            where p.status = com.mrnpe.one.f2home.entity.ProductStatus.ACTIVE
+              and p.farmerId in :farmIds
+              and (:category is null or p.category = :category)
+            order by p.createdAt desc
+            """)
+    List<Product> findActiveForDelivery(@Param("farmIds") java.util.Collection<Long> farmIds,
+            @Param("category") String category);
+
     /**
      * Row-locked read used by checkout so two customers cannot both buy the
      * last units: the second transaction waits, then sees the reduced stock.

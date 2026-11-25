@@ -2,6 +2,8 @@ package com.mrnpe.one.f2home.entity;
 
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.DynamicUpdate;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -14,6 +16,7 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 @Entity
+@DynamicUpdate
 @Table(name = "f2home_users")
 public class F2HomeUser {
 
@@ -23,6 +26,18 @@ public class F2HomeUser {
 
     @Column(name = "phone_number", nullable = false, unique = true, length = 20)
     private String phoneNumber;
+
+    @Column(length = 40)
+    private String username;
+
+    @Column(name = "test_account", nullable = false)
+    private boolean testAccount;
+
+    @Column(name = "session_version", nullable = false)
+    private long sessionVersion;
+
+    @Column(name = "default_address_id")
+    private Long defaultAddressId;
 
     @Column(name = "email")
     private String email;
@@ -101,6 +116,15 @@ public class F2HomeUser {
 
     public String getPhoneNumber() { return phoneNumber; }
     public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
+
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+    public boolean isTestAccount() { return testAccount; }
+    public void setTestAccount(boolean testAccount) { this.testAccount = testAccount; }
+    public long getSessionVersion() { return sessionVersion; }
+    public void invalidateSessions() { sessionVersion++; }
+    public Long getDefaultAddressId() { return defaultAddressId; }
+    public void setDefaultAddressId(Long defaultAddressId) { this.defaultAddressId = defaultAddressId; }
 
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
