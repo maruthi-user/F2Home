@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { useDispatch, useSelector } from "react-redux";
+import { useSelector } from "react-redux";
 import { Minus, Plus, ShoppingCart } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { addToCart, selectCartItems } from "@/redux/slices/cartSlice";
+import { selectCartItems } from "@/redux/slices/cartSlice";
+import useAddFarmProduct from "./useAddFarmProduct";
 import { shortUnit } from "@/config/marketplaceCategories";
 
 // Inline quantity stepper + Add button for a product tile, so a customer
@@ -10,8 +10,7 @@ import { shortUnit } from "@/config/marketplaceCategories";
 // grid without opening the product. Quantity is capped at what is still
 // available after whatever is already in the cart.
 export default function AddToCartControl({ product }) {
-  const dispatch = useDispatch();
-  const { toast } = useToast();
+  const { add, confirmation } = useAddFarmProduct();
   const inCart = useSelector(selectCartItems).find((i) => i.productId === product.id)?.quantity || 0;
   const remaining = Math.max(0, product.quantity - inCart);
   const [qty, setQty] = useState(1);
@@ -20,12 +19,7 @@ export default function AddToCartControl({ product }) {
 
   const handleAdd = () => {
     if (remaining <= 0) return;
-    dispatch(addToCart({ product, quantity: value }));
-    toast({
-      title: "Added to cart",
-      description: `${value} ${product.unit} of ${product.name} added.`,
-    });
-    setQty(1);
+    add(product, value, () => setQty(1));
   };
 
   if (product.quantity <= 0) {
@@ -49,7 +43,7 @@ export default function AddToCartControl({ product }) {
   }
 
   return (
-    <div className="flex h-8 items-stretch gap-1.5" onClick={(e) => e.stopPropagation()}>
+    <div className="marketplace-cart-controls flex h-8 items-stretch gap-1.5" onClick={(e) => e.stopPropagation()}>
       <div className="flex shrink-0 items-center rounded-lg border border-gray-200 dark:border-gray-700">
         <button
           type="button"
@@ -69,7 +63,7 @@ export default function AddToCartControl({ product }) {
             const n = parseInt(e.target.value, 10);
             setQty(Number.isFinite(n) ? Math.min(remaining, Math.max(1, n)) : 1);
           }}
-          className="h-full w-9 border-x border-gray-200 bg-transparent text-center text-xs font-semibold text-[#2f3b2f] outline-none [appearance:textfield] dark:border-gray-700 dark:text-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          className="min-w-0 self-stretch w-9 border-x border-gray-200 bg-transparent text-center text-xs font-semibold text-[#2f3b2f] outline-none [appearance:textfield] dark:border-gray-700 dark:text-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           aria-label={`Quantity in ${product.unit}`}
         />
         <button
@@ -91,6 +85,7 @@ export default function AddToCartControl({ product }) {
         <ShoppingCart className="h-3.5 w-3.5 shrink-0" />
         <span className="truncate">Add {value} {shortUnit(product.unit)}</span>
       </button>
+      {confirmation}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Crosshair, Loader, MapPin, Search } from "lucide-react";
+import { ChevronDown, Crosshair, Loader, MapPin, Search } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { NEARBY_RADIUS_KM } from "@/utils/geo";
+import { NEARBY_RADIUS_KM, isValidCoords } from "@/utils/geo";
 
 const fieldClass =
   "w-full rounded-2xl bg-[#eef3e6] px-4 py-3 text-gray-700 outline-none border border-transparent focus:border-[#7cb342]";
@@ -16,7 +16,7 @@ const fieldClass =
 // centred and lets the customer change it (GPS, place name, or raw
 // coordinates when geocoding is unreachable). Driven entirely by
 // hooks/useCustomerLocation.js.
-export default function LocationBar({ loc }) {
+export default function LocationBar({ loc, savedAddresses = [], compact = false }) {
   const { location, status, error, detectCurrent, setManual, setCoords } = loc;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -43,7 +43,18 @@ export default function LocationBar({ loc }) {
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-[#d9eebf] bg-[#f7faf3] px-3 py-2 text-sm dark:bg-gray-900">
+      {compact ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="flex min-h-11 w-full items-center gap-2 rounded-full border border-[#aeb9a2] px-4 text-sm font-medium"
+          title={location?.label}
+        >
+          <MapPin className="size-4 shrink-0 text-[#245730] dark:text-green-300" />
+          <span className="min-w-0 flex-1 truncate text-left">{location?.label || "Set your location"}</span>
+          <ChevronDown className="size-4 shrink-0" />
+        </button>
+      ) : <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-[#d9eebf] bg-[#f7faf3] px-3 py-2 text-sm dark:bg-gray-900">
         <MapPin className="h-4 w-4 shrink-0 text-[#33691e]" />
         {location ? (
           <span className="min-w-0 flex-1 truncate text-gray-700 dark:text-gray-200">
@@ -77,7 +88,7 @@ export default function LocationBar({ loc }) {
         >
           {location ? "Change" : "Enter manually"}
         </Button>
-      </div>
+      </div>}
 
       {error && !open && (
         <p className="mt-2 text-sm text-red-600">{error}</p>
@@ -92,6 +103,17 @@ export default function LocationBar({ loc }) {
           </DialogHeader>
 
           <div className="space-y-5">
+            {savedAddresses.some((entry) => isValidCoords(entry.address)) && (
+              <div className="grid gap-2">
+                <h3 className="text-sm font-semibold">Saved delivery addresses</h3>
+                {savedAddresses.filter((entry) => isValidCoords(entry.address)).map((entry) => (
+                  <Button key={entry.id} type="button" variant="outline" className="justify-start whitespace-normal text-left"
+                    onClick={() => { loc.selectSavedAddress(entry); setOpen(false); }}>
+                    <MapPin aria-hidden /> {entry.name} · {entry.address.city || entry.address.label}
+                  </Button>
+                ))}
+              </div>
+            )}
             <Button
               type="button"
               onClick={handleUseCurrent}
@@ -131,8 +153,8 @@ export default function LocationBar({ loc }) {
 
             {showCoords && (
               <form onSubmit={handleCoords} className="grid grid-cols-[1fr_1fr_auto] gap-2">
-                <input type="number" step="any" placeholder="Latitude" value={lat} onChange={(e) => setLat(e.target.value)} className={fieldClass} />
-                <input type="number" step="any" placeholder="Longitude" value={lng} onChange={(e) => setLng(e.target.value)} className={fieldClass} />
+                <input type="number" required step="any" placeholder="Latitude" value={lat} onChange={(e) => setLat(e.target.value)} className={fieldClass} />
+                <input type="number" required step="any" placeholder="Longitude" value={lng} onChange={(e) => setLng(e.target.value)} className={fieldClass} />
                 <Button type="submit" className="rounded-2xl bg-[#33691e] text-white hover:opacity-90">Set</Button>
               </form>
             )}

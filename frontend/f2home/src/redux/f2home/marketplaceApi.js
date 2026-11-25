@@ -36,9 +36,9 @@ export const marketplaceApi = apiSlice
 
       // Customer: listings within the radius of (lat, lng), nearest first.
       getNearbyProducts: builder.query({
-        query: ({ lat, lng, category }) => ({
+        query: ({ lat, lng, category, deliveryAware }) => ({
           url: "/api/f2home/products",
-          params: { lat, lng, category: category || undefined },
+          params: { lat, lng, category: category || undefined, deliveryAware },
         }),
         providesTags: (result = []) => [
           { type: "Product", id: "LIST" },
@@ -98,9 +98,18 @@ export const marketplaceApi = apiSlice
         providesTags: [{ type: "Farm", id: "ORDERS" }],
       }),
 
+      updateFulfillment: builder.mutation({
+        query: ({ orderId, ...body }) => ({
+          url: "/api/f2home/farm/orders/" + orderId + "/fulfillment",
+          method: "POST",
+          body,
+        }),
+        invalidatesTags: [{ type: "Farm", id: "ORDERS" }, { type: "Order", id: "LIST" }],
+      }),
+
       decideFarmOrder: builder.mutation({
-        query: ({ itemId, accept }) => ({
-          url: `/api/f2home/farm/orders/${itemId}/${accept ? "accept" : "reject"}`,
+        query: ({ itemId, orderId, accept }) => ({
+          url: `/api/f2home/farm/orders/${orderId ?? itemId}/${accept ? "accept" : "reject"}${orderId ? "-order" : ""}`,
           method: "POST",
         }),
         // Rejecting returns stock; accepting changes sold / revenue.
@@ -157,10 +166,19 @@ export const marketplaceApi = apiSlice
         ],
       }),
 
-      placeOrder: builder.mutation({
+      getCheckoutQuote: builder.mutation({
         query: (body) => ({
+          url: "/api/f2home/orders/quote",
+          method: "POST",
+          body,
+        }),
+      }),
+
+      placeOrder: builder.mutation({
+        query: ({ body, attemptId }) => ({
           url: "/api/f2home/orders",
           method: "POST",
+          headers: { "Idempotency-Key": attemptId },
           body,
         }),
         // Stock changed, so every cached product list is stale.
@@ -169,6 +187,58 @@ export const marketplaceApi = apiSlice
           { type: "Product", id: "LIST" },
           { type: "Farm", id: "HISTORY" },
         ],
+      }),
+
+      cancelOrder: builder.mutation({
+        query: (id) => ({ url: "/api/f2home/orders/" + id + "/cancel", method: "POST" }),
+        invalidatesTags: [
+          { type: "Order", id: "LIST" },
+          { type: "Product", id: "LIST" },
+          { type: "Product", id: "MINE" },
+          { type: "Farm", id: "ORDERS" },
+        ],
+      }),
+
+      getOrder: builder.query({
+        query: (id) => "/api/f2home/orders/" + encodeURIComponent(id),
+        providesTags: [{ type: "Order", id: "LIST" }],
+      }),
+
+      getOrderUpdates: builder.query({
+        query: () => "/api/f2home/orders/updates",
+        providesTags: [{ type: "Order", id: "UPDATES" }],
+      }),
+      markOrderUpdatesRead: builder.mutation({
+        query: (id) => ({ url: "/api/f2home/orders/updates" + (id == null ? "" : "/" + id) + "/read", method: "POST" }),
+        invalidatesTags: [{ type: "Order", id: "UPDATES" }],
+      }),
+      getItemReports: builder.query({
+        query: (orderId) => "/api/f2home/orders/" + orderId + "/reports",
+        providesTags: (result, error, orderId) => [{ type: "Order", id: "REPORTS:" + orderId }],
+      }),
+      createItemReport: builder.mutation({
+        query: ({ orderId, ...body }) => ({ url: "/api/f2home/orders/" + orderId + "/reports", method: "POST", body }),
+        invalidatesTags: (result, error, { orderId }) => [{ type: "Order", id: "REPORTS:" + orderId }],
+      }),
+
+      getSavedAddresses: builder.query({
+        query: () => "/api/f2home/orders/addresses",
+        providesTags: [{ type: "Order", id: "ADDRESSES" }],
+      }),
+      saveDeliveryAddress: builder.mutation({
+        query: (body) => ({ url: "/api/f2home/orders/addresses", method: "POST", body }),
+        invalidatesTags: [{ type: "Order", id: "ADDRESSES" }],
+      }),
+      deleteSavedAddress: builder.mutation({
+        query: (id) => ({ url: "/api/f2home/orders/addresses/" + id, method: "DELETE" }),
+        invalidatesTags: [{ type: "Order", id: "ADDRESSES" }],
+      }),
+      getReorderPreview: builder.query({
+        query: ({ orderId, addressId }) => ({
+          url: "/api/f2home/orders/" + orderId + "/reorder",
+          params: addressId ? { addressId } : undefined,
+        }),
+        keepUnusedDataFor: 0,
       }),
 
       getMyOrders: builder.query({
@@ -189,10 +259,22 @@ export const {
   useUpdateFarmProfileMutation,
   useGetFarmOrdersQuery,
   useDecideFarmOrderMutation,
+  useUpdateFulfillmentMutation,
   useGetProductQuery,
   useCreateProductMutation,
   useUpdateProductMutation,
   useDeleteProductMutation,
+  useGetCheckoutQuoteMutation,
   usePlaceOrderMutation,
+  useGetOrderUpdatesQuery,
+  useMarkOrderUpdatesReadMutation,
+  useGetItemReportsQuery,
+  useCreateItemReportMutation,
+  useGetSavedAddressesQuery,
+  useSaveDeliveryAddressMutation,
+  useDeleteSavedAddressMutation,
+  useGetReorderPreviewQuery,
   useGetMyOrdersQuery,
+  useGetOrderQuery,
+  useCancelOrderMutation,
 } = marketplaceApi;

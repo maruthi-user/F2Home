@@ -1,115 +1,114 @@
-import { Banknote, Loader, MapPin, Package, ShoppingBag } from "lucide-react";
-import { Card } from "@/components/ui/card";
-import PageHeader, { Page } from "@/components/common/PageHeader";
-import { useGetMyOrdersQuery, mediaUrl } from "@/redux/f2home/marketplaceApi";
-import { getPaymentMethod } from "@/config/paymentMethods";
+import { useState } from "react";
+import { ChevronLeft, ChevronRight, Package, Search } from "lucide-react";
+import { Link } from "wouter";
+import { Button } from "@/components/ui/button";
+import { useGetMyOrdersQuery } from "@/redux/f2home/marketplaceApi";
+import ReorderButton from "./ReorderButton";
+import { orderStatusLabel, statusLabels } from "./orderStatus";
 
-// Manual addresses carry their parts (street, town, PIN); current-location
-// addresses carry a geocoded label plus optional street/landmark. Either
-// way, each piece is printed once.
-const formatAddress = (a) =>
-  (a.mode === "MANUAL"
-    ? [a.line1, a.landmark, a.city, a.pincode]
-    : [a.line1, a.landmark, a.label]
-  )
-    .filter(Boolean)
-    .join(", ");
+const money = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
+const date = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeZone: "Asia/Kolkata" });
 
-const formatDate = (iso) =>
-  new Date(iso).toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+function deliveryDate(order) {
+  return order.deliveryDate && order.status !== "CANCELLED"
+    ? date.format(new Date(order.deliveryDate + "T00:00:00+05:30")) : "—";
+}
 
-// A customer's order history from GET /api/f2home/orders: one order = many
-// line items (a snapshot taken at checkout) + delivery address + payment.
+function Status({ order }) {
+  const tone = order.status === "DELIVERED" ? "bg-emerald-100 text-emerald-900"
+    : ["CANCELLED", "DELIVERY_FAILED"].includes(order.status) ? "bg-red-100 text-red-900"
+      : "bg-amber-100 text-amber-900";
+  return <span className={"inline-block rounded-lg px-2 py-1 text-xs font-medium " + tone}>{orderStatusLabel(order)}</span>;
+}
+
+function OpenOrder({ order }) {
+  const closed = ["DELIVERED", "CANCELLED"].includes(order.status);
+  return <Button asChild variant="outline" size="sm">
+    <Link href={"/app/orders/" + order.id} aria-label={(closed ? "View" : "Track") + " order " + order.id}>
+      {closed ? "View order" : "Track order"}
+    </Link>
+  </Button>;
+}
+
 export default function MyOrders() {
-  const { data: orders = [], isLoading, error } = useGetMyOrdersQuery();
+  const { data: orders = [], isLoading, error, refetch } = useGetMyOrdersQuery();
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
+  const [page, setPage] = useState(0);
+  const query = search.trim().toLowerCase();
+  const matches = orders.filter(order => (!status || order.status === status)
+    && [String(order.id), ...order.items.flatMap(item => [item.productName, item.farmerName])]
+      .some(value => value?.toLowerCase().includes(query.replace(/^#/, ""))));
+  const size = 10;
+  const currentPage = Math.min(page, Math.max(0, Math.ceil(matches.length / size) - 1));
+  const offset = currentPage * size;
+  const rows = matches.slice(offset, offset + size);
 
-  return (
-    <Page className="max-w-4xl">
-      <PageHeader
-        icon={Package}
-        title="My orders"
-        subtitle={isLoading ? "" : `${orders.length} order${orders.length === 1 ? "" : "s"} from local farmers`}
-      />
-
-      {isLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader className="h-8 w-8 animate-spin text-[#33691e]" />
+  return <div className="phone-module w-full min-w-0 px-3 py-4 sm:px-5">
+    <header className="mb-3 flex items-center justify-between gap-3">
+      <h1 className="flex items-center gap-2 text-xl font-semibold"><Package aria-hidden size={22} /> My orders</h1>
+      <Button asChild variant="outline" size="sm"><Link href="/app/marketplace">Shop produce</Link></Button>
+    </header>
+    <section aria-label="Order history" className="min-w-0 rounded-xl border bg-card">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b p-3">
+        <label className="relative w-full sm:max-w-72">
+          <span className="sr-only">Search orders</span>
+          <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <input type="search" value={search} placeholder="Order number, farm or product"
+            onChange={event => { setSearch(event.target.value); setPage(0); }}
+            className="h-11 w-full rounded-lg border bg-background pl-9 pr-3 text-base sm:text-sm" />
+        </label>
+        <select aria-label="Order status" value={status} onChange={event => { setStatus(event.target.value); setPage(0); }}
+          className="h-11 max-w-full rounded-lg border bg-background px-3 text-sm">
+          <option value="">All statuses</option>
+          {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+      </div>
+      {isLoading && <p role="status" className="p-4">Loading orders…</p>}
+      {error && <p role="alert" className="p-4">Couldn’t load orders. <Button variant="outline" onClick={refetch}>Try again</Button></p>}
+      {!isLoading && !error && !rows.length && <p className="p-4 text-sm text-muted-foreground">{orders.length ? "No matching orders." : "Your orders will appear here after checkout."}</p>}
+      {!!rows.length && <>
+        <div className="hidden overflow-x-auto lg:block">
+          <table className="w-full text-left text-sm [&_td]:px-3 [&_td]:py-2.5 [&_th]:px-3 [&_th]:py-2.5">
+            <thead className="border-b bg-muted/35 text-xs"><tr>
+              {["Order", "Placed", "Farm / items", "Delivery date", "Status", "Order total", "Actions"].map(label =>
+                <th key={label} scope="col" className="whitespace-nowrap font-semibold">{label}</th>)}
+            </tr></thead>
+            <tbody className="divide-y">
+              {rows.map(order => <tr key={order.id} className="hover:bg-muted/25">
+                <th scope="row" className="font-medium">#{order.id}</th>
+                <td className="whitespace-nowrap">{date.format(new Date(order.createdAt))}</td>
+                <td className="min-w-24 break-words">{[...new Set(order.items.map(item => item.farmerName).filter(Boolean))].join(", ") || "Farm"}<br />
+                  <span className="text-xs text-muted-foreground">{order.itemCount} {order.itemCount === 1 ? "item" : "items"}</span></td>
+                <td className="whitespace-nowrap">{deliveryDate(order)}</td>
+                <td><Status order={order} /></td>
+                <td className="whitespace-nowrap font-semibold">{money.format(order.status === "CANCELLED" ? 0 : order.total)}</td>
+                <td><div className="flex flex-wrap gap-2"><OpenOrder order={order} /><ReorderButton orderId={order.id} /></div></td>
+              </tr>)}
+            </tbody>
+          </table>
         </div>
-      ) : error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-5 text-center text-sm text-red-600">
-          {error?.data?.message || "Couldn't load your orders. Please try again."}
+        <div className="grid gap-2.5 bg-muted/20 p-2.5 sm:grid-cols-2 lg:hidden">
+          {rows.map(order => <article key={order.id} className="min-w-0 space-y-3 rounded-lg border bg-card p-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div><h2 className="font-semibold">Order #{order.id}</h2><p className="text-xs text-muted-foreground">{date.format(new Date(order.createdAt))}</p></div>
+              <Status order={order} />
+            </div>
+            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 border-t pt-2 text-sm">
+              <dt className="text-muted-foreground">Delivery</dt><dd>{deliveryDate(order)}</dd>
+              <dt className="text-muted-foreground">Order total</dt><dd className="font-semibold">{money.format(order.status === "CANCELLED" ? 0 : order.total)}</dd>
+            </dl>
+            <div className="flex flex-wrap gap-2"><OpenOrder order={order} /><ReorderButton orderId={order.id} /></div>
+          </article>)}
         </div>
-      ) : orders.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-muted-foreground dark:border-gray-700">
-          You haven't bought anything yet — head to the Marketplace to explore.
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {orders.map((order) => {
-            const method = getPaymentMethod(order.payment?.method) || null;
-            return (
-              <Card key={order.id} className="overflow-hidden">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 bg-[#f7faf3] px-4 py-3 text-xs dark:border-gray-800 dark:bg-gray-900">
-                  <span className="text-muted-foreground">
-                    Order #{order.id} · {formatDate(order.createdAt)} · {order.itemCount} item{order.itemCount === 1 ? "" : "s"}
-                  </span>
-                  <span className="rounded-full bg-[#d9eebf] px-2.5 py-0.5 font-medium text-[#33691e]">
-                    {(order.status || "PLACED").replace(/_/g, " ")}
-                  </span>
-                </div>
-
-                <ul className="divide-y divide-gray-100 dark:divide-gray-800">
-                  {order.items.map((item, index) => {
-                    const url = mediaUrl(item.thumbnailUrl);
-                    return (
-                      <li key={`${order.id}:${item.productId ?? index}`} className="flex items-center gap-4 px-4 py-3">
-                        <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#f2f8ea]">
-                          {url ? (
-                            <img src={url} alt={item.productName} className="h-full w-full object-cover" />
-                          ) : (
-                            <ShoppingBag className="h-5 w-5 text-[#8bc34a]" />
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <h3 className="truncate font-semibold text-[#3c3c3c] dark:text-white">{item.productName}</h3>
-                          <p className="text-xs text-muted-foreground">
-                            {item.quantity} {item.unit || ""} × ₹{item.unitPrice}
-                            {item.farmerName ? ` · ${item.farmerName}` : ""}
-                          </p>
-                        </div>
-                        <span className="shrink-0 font-semibold text-[#33691e]">₹{Number(item.lineTotal).toFixed(2)}</span>
-                      </li>
-                    );
-                  })}
-                </ul>
-
-                <div className="flex flex-wrap items-start justify-between gap-3 border-t border-gray-100 px-4 py-3 text-sm dark:border-gray-800">
-                  <div className="space-y-1 text-xs text-muted-foreground">
-                    {order.address && (
-                      <p className="flex items-start gap-1.5">
-                        <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#33691e]" />
-                        <span>{formatAddress(order.address)}</span>
-                      </p>
-                    )}
-                    <p className="flex items-center gap-1.5">
-                      <Banknote className="h-3.5 w-3.5 shrink-0 text-[#33691e]" />
-                      {method?.label || order.payment?.method || "Cash on Delivery"}
-                      {order.payment?.status ? ` · ${order.payment.status.toLowerCase()}` : ""}
-                    </p>
-                  </div>
-                  <span className="text-lg font-bold text-[#33691e]">₹{Number(order.total).toFixed(2)}</span>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
-      )}
-    </Page>
-  );
+        <nav aria-label="Order pagination" className="flex items-center justify-end gap-2 border-t p-2.5 text-sm">
+          <Button size="icon" variant="outline" aria-label="Previous page" disabled={!currentPage}
+            onClick={() => setPage(currentPage - 1)}><ChevronLeft aria-hidden /></Button>
+          <span>{offset + 1}–{offset + rows.length} of {matches.length}</span>
+          <Button size="icon" variant="outline" aria-label="Next page" disabled={offset + size >= matches.length}
+            onClick={() => setPage(currentPage + 1)}><ChevronRight aria-hidden /></Button>
+        </nav>
+      </>}
+    </section>
+  </div>;
 }

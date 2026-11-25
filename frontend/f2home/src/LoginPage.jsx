@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import { Lock, Eye, EyeOff, Loader } from "lucide-react";
+import { Lock, Eye, EyeOff, Loader, User } from "lucide-react";
 import { useForm } from "react-hook-form";
-import { useLoginMutation } from "@/redux/f2home/authApi";
+import { useGetLoginOptionsQuery, useLoginMutation } from "@/redux/f2home/authApi";
 import { useNavigate } from "react-router-dom";
 import { Link } from "wouter";
 import F2HomeLogo from "./components/ui/F2HomeLogo";
@@ -25,6 +25,9 @@ export default function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [login] = useLoginMutation();
+  const options = useGetLoginOptionsQuery();
+  const [usePhone, setUsePhone] = useState(false);
+  const usernameMode = options.data?.usernameEnabled && !usePhone;
 
   const rememberedPhone = (() => {
     try {
@@ -36,10 +39,13 @@ export default function LoginPage() {
 
   const {
     register,
+    clearErrors,
     handleSubmit,
     formState: { errors },
   } = useForm({
+    shouldUnregister: true,
     defaultValues: {
+      username: "",
       phoneNumber: fromE164(rememberedPhone),
       password: "",
       remember: !!rememberedPhone,
@@ -54,11 +60,12 @@ export default function LoginPage() {
 
     try {
       // The field holds the 10 local digits; the API gets +91XXXXXXXXXX.
-      const phoneNumber = toE164(formData.phoneNumber);
-      const loginRes = await login({ phoneNumber, password: formData.password }).unwrap();
+      const phoneNumber = usernameMode ? null : toE164(formData.phoneNumber);
+      const identifier = usernameMode ? { username: formData.username.trim() } : { phoneNumber };
+      const loginRes = await login({ ...identifier, password: formData.password }).unwrap();
 
       // "Remember me" only keeps the phone number pre-filled - never the password.
-      try {
+      if (!usernameMode) try {
         if (formData.remember) localStorage.setItem(REMEMBER_KEY, phoneNumber);
         else localStorage.removeItem(REMEMBER_KEY);
       } catch {
@@ -89,9 +96,8 @@ export default function LoginPage() {
       // dashboard's own loading state (AppRouteFallback) takes over.
       navigate("/app/welcome");
     } catch (error) {
-      console.error("Login error:", error);
       setApiError(
-        error?.data?.message || error?.data || "Invalid phone number or password"
+        error?.data?.message || (usernameMode ? "Invalid username or password" : "Invalid phone number or password")
       );
       setIsSubmitting(false);
     }
@@ -143,7 +149,21 @@ export default function LoginPage() {
             onSubmit={handleSubmit((data) => runWithProcessingLock(() => onSubmit(data), "Signing in…"))}
             className="mt-4 space-y-3"
           >
-            <PhoneField register={register} name="phoneNumber" error={errors.phoneNumber} placeholder="Mobile number" variant="glass" />
+            {usernameMode ? (
+              <div className="relative">
+                <User aria-hidden className="pointer-events-none absolute left-3.5 top-3.5 size-4 text-gray-400" />
+                <input aria-label="Username" placeholder="Username" autoComplete="username" maxLength={40}
+                  className={inputClass(!!errors.username)}
+                  {...register("username", { validate: (value) => !usernameMode || !!value.trim() || "Enter your username" })} />
+                {errors.username && <p className="mt-1 text-xs text-red-600">{errors.username.message}</p>}
+              </div>
+            ) : <PhoneField register={register} name="phoneNumber" error={errors.phoneNumber} placeholder="Mobile number" variant="glass" />}
+            {options.data?.usernameEnabled && (
+              <button type="button" className="text-sm font-semibold text-[#33691e]"
+                onClick={() => { setUsePhone(!usePhone); clearErrors(); setApiError(""); }}>
+                {usernameMode ? "Use phone number" : "Use username"}
+              </button>
+            )}
 
             <div>
               <div className="relative">
@@ -170,14 +190,14 @@ export default function LoginPage() {
             </div>
 
             <div className="flex items-center justify-between text-xs">
-              <label className="flex cursor-pointer items-center gap-2 text-gray-600">
+              {!usernameMode && <label className="flex cursor-pointer items-center gap-2 text-gray-600">
                 <input
                   type="checkbox"
                   {...register("remember")}
                   className="h-3.5 w-3.5 rounded border-gray-300 accent-[#33691e]"
                 />
                 Remember me
-              </label>
+              </label>}
               <button
                 type="button"
                 onClick={() => navigate("/auth/forgot-password")}

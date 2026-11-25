@@ -14,30 +14,32 @@ import {
   selectCartItems,
   selectCartCount,
   selectCartTotal,
-  makeSelectCheckoutBlocker,
+  canAddFromFarm,
+  keepFarm,
   setQuantity,
   removeFromCart,
 } from "@/redux/slices/cartSlice";
 
 // The customer's cart. Line items come from the cart slice; the live
 // product (thumbnail, current stock) is re-read from the API so a farmer
-// lowering stock is reflected before checkout. Checkout stays disabled
-// until the server's minimum item count AND minimum value are both met.
+// lowering stock is reflected before checkout.
 export default function CartPage() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const items = useSelector(selectCartItems);
+  const farm = items[0];
+  const oneFarm = !!farm && canAddFromFarm(items, farm.farmerId);
+  const knownFarms = new Map(items.filter((item) => item.farmerId != null)
+    .map((item) => [item.farmerId, item.farmerName]));
   const count = useSelector(selectCartCount);
   const total = useSelector(selectCartTotal);
   const { data: rules } = useGetMarketplaceRulesQuery();
-  const selectBlocker = useMemo(() => makeSelectCheckoutBlocker(rules), [rules]);
-  const blocker = useSelector(selectBlocker);
 
   const ids = items.map((i) => i.productId);
-  const { data: liveProducts = [] } = useGetProductsByIdsQuery(ids, { skip: ids.length === 0 });
+  const { currentData } = useGetProductsByIdsQuery(ids, { skip: ids.length === 0 });
   const live = useMemo(
-    () => Object.fromEntries(liveProducts.map((p) => [p.id, p])),
-    [liveProducts]
+    () => Object.fromEntries((currentData || []).map((p) => [p.id, p])),
+    [currentData]
   );
 
   const minItems = rules?.minOrderItems ?? 5;
@@ -54,6 +56,23 @@ export default function CartPage() {
         backFallback="/app/marketplace"
       />
 
+      {oneFarm && <p className="mb-4 text-sm font-medium">Farm: {farm.farmerName}</p>}
+      {items.length > 0 && !oneFarm && (
+        <Card className="mb-4 space-y-3 p-4">
+          <h2 className="font-semibold">One farm per checkout</h2>
+          <p className="text-sm text-muted-foreground">
+            Choose a farm below to keep its items and remove the others. You can also remove items individually.
+            Items whose farm can’t be verified must be removed before checkout.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {[...knownFarms].map(([id, name]) => (
+              <Button key={id} type="button" variant="outline" onClick={() => dispatch(keepFarm(id))}>
+                Keep items from {name}
+              </Button>
+            ))}
+          </div>
+        </Card>
+      )}
       {items.length === 0 ? (
         <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-muted-foreground dark:border-gray-700">
           <ShoppingCart className="mx-auto mb-3 h-8 w-8 text-[#8bc34a]" />
@@ -73,7 +92,7 @@ export default function CartPage() {
               const stock = product ? product.quantity : Infinity;
               const overStock = product && item.quantity > product.quantity;
               // Loaded the batch and this id is missing -> the listing is gone.
-              const gone = liveProducts.length > 0 && !product;
+              const gone = currentData !== undefined && !product;
 
               return (
                 <Card key={item.productId} className="flex items-center gap-3 p-3">
@@ -130,21 +149,21 @@ export default function CartPage() {
             </div>
 
             <div className="mt-5 flex items-center justify-between border-t border-gray-200 pt-4 dark:border-gray-700">
-              <span className="font-medium text-gray-700 dark:text-gray-200">Total</span>
+              <span className="font-medium text-gray-700 dark:text-gray-200">Estimated subtotal</span>
               <span className="text-xl font-bold text-[#33691e]">₹{total.toFixed(2)}</span>
             </div>
 
             <Button
               type="button"
-              disabled={!!blocker}
+              disabled={!oneFarm}
               onClick={() => navigate("/app/checkout")}
               className="mt-4 w-full rounded-full bg-gradient-to-r from-[#8bc34a] to-[#33691e] text-white hover:opacity-90 disabled:opacity-50"
             >
               Proceed to checkout
             </Button>
-            {blocker && (
-              <p className="mt-2 text-center text-xs text-red-600">To checkout, {blocker}.</p>
-            )}
+            <p className="mt-2 text-center text-xs text-muted-foreground">
+              Current prices, order minimums and delivery are checked at checkout.
+            </p>
           </Card>
         </div>
       )}

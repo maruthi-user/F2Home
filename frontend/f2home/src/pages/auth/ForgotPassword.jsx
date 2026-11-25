@@ -58,8 +58,8 @@ const ForgotPassword = () => {
       <AuthLayout>
         <SuccessScreen
           icon={MessageCircle}
-          title="OTP Sent"
-          message={`If the number is registered, an OTP has been sent to ${successPhoneNumber}.`}
+          title="Check your messages"
+          message={`If the number is registered and SMS delivery is available, you’ll receive a code at ${successPhoneNumber}.`}
           note="The OTP is valid for 10 minutes."
           buttonLabel="Enter OTP"
           buttonHref={`/auth/restore-password?phone=${encodeURIComponent(successPhoneNumber)}`}

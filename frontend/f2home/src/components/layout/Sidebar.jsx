@@ -26,12 +26,14 @@ import {
 
 import * as Icons from "lucide-react";
 import { Link, useLocation } from "wouter";
+import { useGetLoginOptionsQuery } from "@/redux/f2home/authApi";
 import { useSelector } from "react-redux";
 import { hasPermission } from "@/utils/permissions";
 import { ROLE_PERMISSIONS } from "@/utils/rolePermissionMap";
 
 
 export function Sidebar() {
+  const { data: options } = useGetLoginOptionsQuery();
   const { activeApp, isSidebarExpanded, toggleSidebar, activeAppId } = useLayout();
   const user = useSelector(
     (state) => state.auth?.user || null
@@ -141,6 +143,7 @@ export function Sidebar() {
               .filter((module) => {
 
               /* ================= ROLE BASED ================= */
+              if (module.testAccountsOnly && !options?.usernameEnabled) return false;
               if (module.allowedRoles?.length > 0) {
                 return module.allowedRoles.includes(
                   user?.role

@@ -1,0 +1,81 @@
+.marketplace-view .marketplace-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.marketplace-view .marketplace-card {
+  container-type: inline-size;
+  border-color: #d9d6c6;
+  background: #fffdf7;
+  border-radius: 0.875rem;
+}
+
+.marketplace-view .marketplace-card-image {
+  aspect-ratio: 16 / 10;
+}
+
+.marketplace-view .marketplace-card-name {
+  font-size: 1rem;
+  color: #17391e;
+}
+
+.marketplace-view .marketplace-cart-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  height: auto;
+}
+
+.marketplace-view .marketplace-cart-controls button {
+  min-height: 2.75rem;
+}
+
+.marketplace-view .marketplace-cart-controls > div {
+  justify-content: space-between;
+}
+
+.marketplace-view .marketplace-cart-controls > div button {
+  width: 2.75rem;
+}
+
+.marketplace-view .marketplace-cart-controls > button {
+  background: #245730;
+}
+
+.marketplace-view .marketplace-cart-controls > button:hover {
+  background: #183f23;
+}
+
+.dark .marketplace-view .marketplace-card {
+  border-color: var(--border);
+  background: var(--card);
+}
+
+.dark .marketplace-view .marketplace-card-name {
+  color: var(--foreground);
+}
+
+@container (min-width: 235px) {
+  .marketplace-view .marketplace-cart-controls {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 339px) {
+  .marketplace-view .marketplace-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 768px) {
+  .marketplace-view .marketplace-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+  }
+}
+
+@media (min-width: 1200px) {
+  .marketplace-view .marketplace-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}

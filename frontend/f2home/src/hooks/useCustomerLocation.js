@@ -110,7 +110,12 @@ export default function useCustomerLocation() {
     [commit]
   );
 
+  const selectSavedAddress = useCallback(({ id, name, address }) => {
+    if (!isValidCoords(address)) return;
+    commit({ lat: address.lat, lng: address.lng, label: name + " · " + (address.label || address.city || "Saved address"), savedAddressId: id, source: "saved" });
+  }, [commit]);
+
   const clear = useCallback(() => commit(null), [commit]);
 
-  return { location, status, error, detectCurrent, setManual, setCoords, clear };
+  return { location, status, error, detectCurrent, setManual, setCoords, selectSavedAddress, clear };
 }

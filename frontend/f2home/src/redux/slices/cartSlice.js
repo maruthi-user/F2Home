@@ -2,7 +2,7 @@ import { createSlice, createSelector } from "@reduxjs/toolkit";
 
 // Customer shopping cart. Holds only ids + quantities + a light product
 // snapshot (name/price/unit) for the badge and totals; the cart page always
-// re-reads the live product (images, current stock) from IndexedDB.
+// re-reads the live product (images, current stock) from the API.
 //
 // Persisted to localStorage PER CUSTOMER (key includes the phone number) so
 // two customers sharing a browser never see each other's cart, and a cart
@@ -35,6 +35,10 @@ function save(phone, items) {
   }
 }
 
+export function canAddFromFarm(items, farmerId) {
+  return farmerId != null && items.every((item) => item.farmerId === farmerId);
+}
+
 const initialState = {
   owner: null, // customer phone the items belong to
   items: [], // [{ productId, name, price, unit, farmerName, quantity }]
@@ -52,9 +56,12 @@ const cartSlice = createSlice({
       state.items = phone ? load(phone) : [];
     },
     addToCart: (state, action) => {
-      const { product, quantity = 1 } = action.payload;
-      const existing = state.items.find((i) => i.productId === product.id);
+      const { product, quantity = 1, replace = false } = action.payload;
       const max = Number(product.quantity) || 0;
+      if (product.farmerId == null || quantity <= 0 || max <= 0) return;
+      if (!replace && !canAddFromFarm(state.items, product.farmerId)) return;
+      if (replace) state.items = [];
+      const existing = state.items.find((i) => i.productId === product.id);
 
       if (existing) {
         existing.quantity = Math.min(max, existing.quantity + quantity);
@@ -70,9 +77,24 @@ const cartSlice = createSlice({
           price: Number(product.price),
           unit: product.unit,
           farmerName: product.farmerName,
+          farmerId: product.farmerId,
           quantity: Math.min(max, quantity),
         });
       }
+      save(state.owner, state.items);
+    },
+    fillMissingFarmIds: (state, action) => {
+      if (state.owner !== action.payload.owner) return;
+      const farms = new Map(action.payload.products.map((product) => [product.id, product.farmerId]));
+      for (const item of state.items) {
+        if (item.farmerId == null && farms.get(item.productId) != null) {
+          item.farmerId = farms.get(item.productId);
+        }
+      }
+      save(state.owner, state.items);
+    },
+    keepFarm: (state, action) => {
+      state.items = state.items.filter((item) => item.farmerId === action.payload);
       save(state.owner, state.items);
     },
     setQuantity: (state, action) => {
@@ -90,6 +112,17 @@ const cartSlice = createSlice({
       state.items = state.items.filter((i) => i.productId !== action.payload);
       save(state.owner, state.items);
     },
+    replaceFromReorder: (state, action) => {
+      const items = action.payload;
+      if (!items.length || !canAddFromFarm(items, items[0].farmerId)) return;
+      const grouped = new Map();
+      for (const item of items) {
+        const previous = grouped.get(item.productId);
+        grouped.set(item.productId, { ...item, quantity: (previous?.quantity ?? 0) + item.quantity });
+      }
+      state.items = [...grouped.values()];
+      save(state.owner, state.items);
+    },
     clearCart: (state) => {
       state.items = [];
       save(state.owner, state.items);
@@ -97,7 +130,7 @@ const cartSlice = createSlice({
   },
 });
 
-export const { loadCartFor, addToCart, setQuantity, removeFromCart, clearCart } =
+export const { loadCartFor, addToCart, fillMissingFarmIds, keepFarm, setQuantity, removeFromCart, replaceFromReorder, clearCart } =
   cartSlice.actions;
 
 // ---- Selectors -----------------------------------------------------------
@@ -120,7 +153,10 @@ export const makeSelectCheckoutBlocker = (rules) => {
   const minItems = rules?.minOrderItems ?? MIN_ORDER_ITEMS;
   const minValue = Number(rules?.minOrderValue ?? MIN_ORDER_VALUE);
 
-  return createSelector([selectCartCount, selectCartTotal], (count, total) => {
+  return createSelector([selectItems, selectCartCount, selectCartTotal], (items, count, total) => {
+    if (items.length && !canAddFromFarm(items, items[0].farmerId)) {
+      return "keep items from one verified farm";
+    }
     const reasons = [];
     if (count < minItems) {
       reasons.push(`add ${minItems - count} more item${minItems - count === 1 ? "" : "s"} (minimum ${minItems})`);

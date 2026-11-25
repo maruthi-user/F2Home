@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLayout } from '../../context/LayoutContext';
 import { cn } from '../../lib/utils';
+import { OrderUpdates } from "./OrderUpdates";
 import F2HomeLogo from "../ui/F2HomeLogo";
 import { useSelector, useDispatch } from 'react-redux';
 import { logout } from '../../redux/slices/authSlice';
@@ -61,7 +62,7 @@ const FARMER_TABS = [
   { label: "My Farm", path: "/app/farm/history" },
 ];
 
-export function TopNav() {
+export function TopNav({ isShopping = false }) {
   const { theme, toggleTheme, toggleLauncher } = useLayout();
   const searchInputRef = useRef(null);
   const user = useSelector((state) => state.auth?.user || null);
@@ -127,16 +128,19 @@ export function TopNav() {
 
   return (
     // <header className="fixed top-0 left-0 right-0 h-16 bg-[var(--background-white)] backdrop-blur-md border-b border-border z-40 flex items-center justify-between px-4 transition-colors width-auto">
-    <header className="fixed top-0 inset-x-0 h-16 bg-[var(--background-white)] backdrop-blur-md border-b border-border z-40 flex items-center justify-between px-2 sm:px-4 lg:px-6">
+    <header className={cn("fixed top-0 inset-x-0 h-16 border-b border-border z-40 flex items-center justify-between px-2 sm:px-4 lg:px-6", isShopping ? "bg-[#faf7ef] dark:bg-background" : "bg-[var(--background-white)] backdrop-blur-md")}>
       {/* Left: Launcher & Brand */}
       {/* <div className="flex items-center gap-4"> */}
       <div className="flex items-center sm:-ml-2 lg:-ml-4 gap-1 sm:gap-2">
         <Button
           variant="ghost"
           size="icon"
-          onClick={toggleLauncher}
+          onClick={() => {
+            if (window.matchMedia("(width < 640px)").matches) navigate("/app/welcome");
+            else toggleLauncher();
+          }}
           className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors cursor-pointer"
-          aria-label="Open App Launcher"
+          aria-label="Open modules"
         >
           <Grip className="h-5 w-5 sm:h-6 sm:w-6" />
         </Button>
@@ -206,7 +210,7 @@ export function TopNav() {
         {/* Notifications Dropdown */}
         {/* <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground cursor-pointer">
+            <Button variant="ghost" size="icon" className={cn("relative text-muted-foreground hover:text-foreground cursor-pointer", isShopping && "lg:hidden")}>
               <Bell className="h-5 w-5" />
               <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full border-2 border-background"></span>
             </Button>
@@ -260,6 +264,7 @@ export function TopNav() {
           </DropdownMenuContent>
         </DropdownMenu> */}
 
+        {user?.role === "CUSTOMER" && <OrderUpdates />}
         {/* Cart - customers only. Count badge comes from the cart slice
             (see redux/slices/cartSlice.js), which is per signed-in customer. */}
         {user?.role === "CUSTOMER" && (

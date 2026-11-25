@@ -38,7 +38,7 @@ export default function ProductGrid({ products = [], isLoading, error, emptyMess
   }
 
   return (
-    <div className={productGridClass}>
+    <div className={productGridClass + " marketplace-grid"}>
       {products.map((product) => (
         <ProductCard
           key={product.id}

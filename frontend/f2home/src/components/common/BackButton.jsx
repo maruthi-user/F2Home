@@ -21,7 +21,7 @@ export default function BackButton({ fallback = "/app/welcome", label = "Back", 
       type="button"
       onClick={handleClick}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-[#33691e] hover:bg-[#f2f8ea] transition cursor-pointer",
+        "page-back inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-[#33691e] hover:bg-[#f2f8ea] transition cursor-pointer",
         className
       )}
       aria-label={label}

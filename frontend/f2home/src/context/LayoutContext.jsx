@@ -36,14 +36,14 @@ export function LayoutProvider({ children }) {
       const saved = localStorage.getItem('activeAppId');
       if (saved && findAppById(saved)) return saved;
     }
-    return null;
+    return "f2home";
   });
   const [activeApp, setActiveApp] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('activeAppId');
-      if (saved) return findAppById(saved);
+      if (saved && findAppById(saved)) return findAppById(saved);
     }
-    return null;
+    return findAppById("f2home");
   });
 
   const persistActiveApp = useCallback((appId) => {

@@ -29,6 +29,7 @@ import {
   useCreateProductMutation,
   useGetMarketplaceRulesQuery,
   useUpdateProductMutation,
+  useGetFarmProfileQuery,
 } from "@/redux/f2home/marketplaceApi";
 import {
   getCurrentPosition,
@@ -84,8 +85,16 @@ export default function ProductFormDialog({ open, onOpenChange, product }) {
   // themselves, so a listing needs coordinates: from the device's GPS, or
   // geocoded from the typed place name on submit (with a raw lat/lng
   // fallback when geocoding is unreachable).
-  const [placeName, setPlaceName] = useState("");
-  const [coords, setCoords] = useState(null); // { lat, lng } | null
+  const [editedPlaceName, setPlaceName] = useState("");
+  const [editedCoords, setCoords] = useState(null);
+  const [locationEdited, setLocationEdited] = useState(false);
+  const { currentData: farmProfile } = useGetFarmProfileQuery(undefined, { skip: !open || !!product });
+  const farmLocation = farmProfile?.locationLabel && isValidCoords(farmProfile)
+    ? { label: farmProfile.locationLabel, lat: farmProfile.lat, lng: farmProfile.lng }
+    : null;
+  const defaultLocation = product ? product.location : farmLocation;
+  const placeName = locationEdited ? editedPlaceName : defaultLocation?.label || "";
+  const coords = locationEdited ? editedCoords : defaultLocation;
   const [manualLat, setManualLat] = useState("");
   const [manualLng, setManualLng] = useState("");
   const [showCoords, setShowCoords] = useState(false);
@@ -129,12 +138,9 @@ export default function ProductFormDialog({ open, onOpenChange, product }) {
     setFileError("");
     setReview(null);
 
-    setPlaceName(product?.location?.label || "");
-    setCoords(
-      product?.location?.lat != null
-        ? { lat: product.location.lat, lng: product.location.lng }
-        : null
-    );
+    setLocationEdited(false);
+    setPlaceName("");
+    setCoords(null);
     setManualLat("");
     setManualLng("");
     setShowCoords(false);
@@ -150,8 +156,9 @@ export default function ProductFormDialog({ open, onOpenChange, product }) {
     try {
       const pos = await getCurrentPosition();
       const next = { lat: pos.lat, lng: pos.lng };
-      setCoords(next);
       const label = await reverseGeocode(next);
+      setLocationEdited(true);
+      setCoords(next);
       setPlaceName(label || `Current location (${formatCoords(next)})`);
     } catch (err) {
       setLocationError(err.message || "Unable to get your location.");
@@ -161,6 +168,7 @@ export default function ProductFormDialog({ open, onOpenChange, product }) {
   };
 
   const handlePlaceNameChange = (e) => {
+    setLocationEdited(true);
     setPlaceName(e.target.value);
     // A hand-edited place no longer matches the stored coordinates.
     setCoords(null);
@@ -169,13 +177,14 @@ export default function ProductFormDialog({ open, onOpenChange, product }) {
 
   const applyManualCoords = () => {
     const next = { lat: Number(manualLat), lng: Number(manualLng) };
-    if (!isValidCoords(next)) {
+    if (!manualLat.trim() || !manualLng.trim() || !isValidCoords(next)) {
       setLocationError("Enter a valid latitude (-90..90) and longitude (-180..180).");
       return;
     }
+    setLocationEdited(true);
     setCoords(next);
     setLocationError("");
-    if (!placeName.trim()) setPlaceName(formatCoords(next));
+    setPlaceName(placeName.trim() || formatCoords(next));
   };
 
   // Resolve the listing's location for saving. Returns null (and sets the
@@ -186,7 +195,7 @@ export default function ProductFormDialog({ open, onOpenChange, product }) {
       setLocationError("Add the product location - use your current location or type the place name.");
       return null;
     }
-    if (coords) return { ...coords, label: label || formatCoords(coords) };
+    if (coords && isValidCoords(coords)) return { lat: coords.lat, lng: coords.lng, label: label || formatCoords(coords) };
 
     const hit = await forwardGeocode(label);
     if (!hit) {
@@ -511,12 +520,13 @@ export default function ProductFormDialog({ open, onOpenChange, product }) {
           </div>
 
           <div>
-            <label className={labelClass}>Product Location</label>
+            <label htmlFor="product-location" className={labelClass}>Product Location</label>
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <MapPin className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#33691e]" />
                 <input
                   type="text"
+                  id="product-location"
                   value={placeName}
                   onChange={handlePlaceNameChange}
                   placeholder="Village / town where the produce is"
@@ -537,7 +547,7 @@ export default function ProductFormDialog({ open, onOpenChange, product }) {
             </div>
             <div className="mt-1.5 flex items-center justify-between text-xs">
               <span className="text-muted-foreground">
-                {coords ? `Pinned at ${formatCoords(coords)}` : "Customers within 20 km of this place will see it."}
+                {!product && !locationEdited && farmLocation ? "From Delivery Settings. Editable for this listing." : coords ? `Pinned at ${formatCoords(coords)}` : "Enter the location for this listing."}
               </span>
               <button
                 type="button"
@@ -553,6 +563,12 @@ export default function ProductFormDialog({ open, onOpenChange, product }) {
                 <input type="number" step="any" placeholder="Longitude" value={manualLng} onChange={(e) => setManualLng(e.target.value)} className={fieldClass} />
                 <Button type="button" onClick={applyManualCoords} className="rounded-2xl bg-[#33691e] text-white hover:opacity-90">Pin</Button>
               </div>
+            )}
+            {!product && farmLocation && locationEdited && (
+              <button type="button" className="mt-2 text-sm font-medium text-[#33691e] underline"
+                onClick={() => { setLocationEdited(false); setLocationError(""); }}>
+                Use saved farm location
+              </button>
             )}
             {locationError && (
               <p className="mt-1 text-sm text-red-500">{locationError}</p>

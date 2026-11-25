@@ -38,9 +38,12 @@ export const f2HomeAuthApi = apiSlice.injectEndpoints({
         body: data,
       }),
     }),
+    getLoginOptions: builder.query({
+      query: () => "/api/f2home/auth/login-options",
+    }),
     login: builder.mutation({
       query: (data) => ({
-        url: "/api/f2home/auth/login",
+        url: data.username ? "/api/f2home/auth/username-login" : "/api/f2home/auth/login",
         method: "POST",
         body: data,
       }),
@@ -80,6 +83,7 @@ export const {
   useRequestRegisterOtpMutation,
   useVerifyRegisterOtpMutation,
   useLoginMutation,
+  useGetLoginOptionsQuery,
   useRefreshMutation,
   useLogoutMutation,
   useForgotPasswordMutation,

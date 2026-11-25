@@ -1,13 +1,17 @@
+import { useState } from "react";
 import { ImageOff, MapPin } from "lucide-react";
 import { formatKm } from "@/utils/geo";
 import { firstImageUrl } from "@/redux/f2home/marketplaceApi";
 import { getCategoryById } from "@/config/marketplaceCategories";
+
+const deliveryDay = new Intl.DateTimeFormat("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
 
 // Compact product tile: 4:3 photo, name, farmer · place · distance, price
 // row. `footer` (Add-to-cart for customers, Edit/Delete for farmers) sits
 // below the price. `onOpen` makes the photo and title open the detail page.
 export default function ProductCard({ product, footer, onOpen, showCategory = false }) {
   const imageUrl = firstImageUrl(product);
+  const [failedImage, setFailedImage] = useState(null);
   const clickable = typeof onOpen === "function";
   const openProps = clickable
     ? {
@@ -26,18 +30,22 @@ export default function ProductCard({ product, footer, onOpen, showCategory = fa
   const outOfStock = product.quantity <= 0;
 
   return (
-    <article className="group flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-gray-800 dark:bg-gray-900">
+    <article className="marketplace-card group flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-gray-800 dark:bg-gray-900">
       <div
         {...openProps}
-        className={`relative aspect-[4/3] w-full overflow-hidden bg-[#eef3e6] ${clickable ? "cursor-pointer" : ""}`}
+        className={`marketplace-card-image relative aspect-[4/3] w-full overflow-hidden bg-[#eef3e6] ${clickable ? "cursor-pointer" : ""}`}
       >
         {imageUrl ? (
+          <>
           <img
+            onError={() => setFailedImage(imageUrl)}
             src={imageUrl}
             alt={product.name}
             loading="lazy"
-            className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+            className={`h-full w-full object-cover transition duration-300 group-hover:scale-[1.03] ${failedImage === imageUrl ? "phone-broken-image" : ""}`}
           />
+          {failedImage === imageUrl && <div className="phone-only phone-image-placeholder"><ImageOff aria-label="Photo unavailable" /></div>}
+          </>
         ) : (
           <div className="flex h-full w-full items-center justify-center">
             <ImageOff className="h-8 w-8 text-[#8bc34a]" />
@@ -58,7 +66,7 @@ export default function ProductCard({ product, footer, onOpen, showCategory = fa
       <div className="flex flex-1 flex-col p-3">
         <h3
           {...openProps}
-          className={`truncate text-sm font-semibold text-[#2f3b2f] dark:text-white ${clickable ? "cursor-pointer hover:text-[#33691e]" : ""}`}
+          className={`marketplace-card-name truncate text-sm font-semibold text-[#2f3b2f] dark:text-white ${clickable ? "cursor-pointer hover:text-[#33691e]" : ""}`}
           title={product.name}
         >
           {product.name}
@@ -70,14 +78,14 @@ export default function ProductCard({ product, footer, onOpen, showCategory = fa
               <span aria-hidden>·</span>
               <MapPin className="h-3 w-3 shrink-0 text-[#8bc34a]" />
               <span className="truncate">{product.location.label}</span>
-              {Number.isFinite(product.distanceKm) && (
+              {!product.nextDeliveryDate && Number.isFinite(product.distanceKm) && (
                 <span className="shrink-0 font-medium text-[#33691e]">{formatKm(product.distanceKm)}</span>
               )}
             </>
           )}
         </p>
 
-        <div className="mt-2 flex items-baseline justify-between gap-2">
+        <div className="mt-2 flex flex-wrap items-baseline justify-between gap-2">
           <span className="text-base font-bold text-[#33691e]">
             ₹{product.price}
             <span className="ml-0.5 text-xs font-normal text-muted-foreground">/ {product.unit}</span>
@@ -87,7 +95,13 @@ export default function ProductCard({ product, footer, onOpen, showCategory = fa
           </span>
         </div>
 
-        {footer && <div className="mt-2.5">{footer}</div>}
+        {product.nextDeliveryDate && (
+          <div className="mt-2 text-xs font-medium text-[#245730] dark:text-green-200">
+            <p>Delivers here · {deliveryDay.format(new Date(product.nextDeliveryDate + "T00:00:00+05:30"))}</p>
+            <p className="text-muted-foreground">Farm approx. {formatKm(product.distanceKm)} away</p>
+          </div>
+        )}
+        {footer && <div className="marketplace-card-footer mt-2.5">{footer}</div>}
       </div>
     </article>
   );

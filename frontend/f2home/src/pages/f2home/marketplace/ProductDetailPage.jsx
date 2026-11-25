@@ -1,16 +1,16 @@
 import { useState } from "react";
 import { useParams } from "wouter";
-import { useDispatch, useSelector } from "react-redux";
+import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { ImageOff, Loader, MapPin, Minus, Plus, ShoppingCart, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import BackButton from "@/components/common/BackButton";
 import { Page } from "@/components/common/PageHeader";
-import { useToast } from "@/hooks/use-toast";
+import useAddFarmProduct from "./useAddFarmProduct";
 import { getCategoryById } from "@/config/marketplaceCategories";
 import { useGetProductQuery, mediaUrl } from "@/redux/f2home/marketplaceApi";
 import { haversineKm, formatKm } from "@/utils/geo";
-import { addToCart, selectCartItems } from "@/redux/slices/cartSlice";
+import { selectCartItems } from "@/redux/slices/cartSlice";
 import useCustomerLocation from "@/hooks/useCustomerLocation";
 
 // Customer view of one listing: gallery (images + optional video), price,
@@ -19,8 +19,7 @@ import useCustomerLocation from "@/hooks/useCustomerLocation";
 export default function ProductDetailPage() {
   const { category: categoryId, id } = useParams();
   const navigate = useNavigate();
-  const dispatch = useDispatch();
-  const { toast } = useToast();
+  const { add, confirmation } = useAddFarmProduct();
   const cartItems = useSelector(selectCartItems);
   const { location: myLocation } = useCustomerLocation();
 
@@ -54,16 +53,12 @@ export default function ProductDetailPage() {
   const active = media[activeIndex] || media[0];
 
   const handleAdd = () => {
-    dispatch(addToCart({ product, quantity }));
-    toast({
-      title: "Added to cart",
-      description: `${quantity} ${product.unit} of ${product.name} added.`,
-    });
-    setQuantity(1);
+    add(product, Math.min(quantity, remaining), () => setQuantity(1));
   };
 
   return (
     <Page className="max-w-6xl">
+      {confirmation}
       <BackButton className="-ml-3 mb-2" fallback={`/app/marketplace/${categoryId}`} />
 
       <div className="grid gap-6 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-10">

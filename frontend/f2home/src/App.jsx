@@ -16,7 +16,6 @@ import { PUBLIC_PATHS } from "./utils/publicPaths";
 const AppsPage = lazy(() => import("./pages/AppsPage"));
 const Welcome = lazy(() => import("./pages/f2home/Welcome"));
 const MarketplaceIndex = lazy(() => import("./pages/f2home/marketplace/MarketplaceIndex"));
-const CategoryPage = lazy(() => import("./pages/f2home/marketplace/CategoryPage"));
 const ProductDetailPage = lazy(() => import("./pages/f2home/marketplace/ProductDetailPage"));
 const CartPage = lazy(() => import("./pages/f2home/marketplace/CartPage"));
 const CheckoutPage = lazy(() => import("./pages/f2home/marketplace/CheckoutPage"));
@@ -25,7 +24,11 @@ const FarmProductDetail = lazy(() => import("./pages/f2home/farm/FarmProductDeta
 const FarmOrders = lazy(() => import("./pages/f2home/farm/FarmOrders"));
 const MyFarm = lazy(() => import("./pages/f2home/farm/MyFarm"));
 const FarmProfile = lazy(() => import("./pages/f2home/farm/FarmProfile"));
+const OrderConfirmation = lazy(() => import("./pages/f2home/orders/OrderConfirmation"));
 const MyOrders = lazy(() => import("./pages/f2home/orders/MyOrders"));
+const CodReconciliation = lazy(() => import("./pages/f2home/admin/CodReconciliation"));
+const TestUsers = lazy(() => import("./pages/f2home/admin/TestUsers"));
+const AdminOrders = lazy(() => import("./pages/f2home/admin/AdminOrders"));
 const FarmerApprovals = lazy(() => import("./pages/f2home/admin/FarmerApprovals"));
 const RegisterPage = lazy(() => import("./pages/auth/RegisterPage"));
 const LoginPage = lazy(() => import("./LoginPage"));
@@ -82,7 +85,7 @@ function AppRouter() {
         {/* F2Home */}
         <Route path="/app/welcome" component={Welcome} />
         <Route path="/app/marketplace" component={MarketplaceIndex} />
-        <Route path="/app/marketplace/:category" component={CategoryPage} />
+        <Route path="/app/marketplace/:category" component={MarketplaceIndex} />
         <Route path="/app/marketplace/:category/:id" component={ProductDetailPage} />
         <Route path="/app/cart" component={CartPage} />
         <Route path="/app/checkout" component={CheckoutPage} />
@@ -115,9 +118,23 @@ function AppRouter() {
             <FarmProfile />
           </RoleRoute>
         </Route>
+        <Route path="/app/orders/:id">
+          <RoleRoute roles={["CUSTOMER"]}>
+            <OrderConfirmation />
+          </RoleRoute>
+        </Route>
         <Route path="/app/orders" component={MyOrders} />
 
         {/* Admin only */}
+        <Route path="/app/admin/cod-reconciliation">
+          <RoleRoute roles={["ADMIN"]}><CodReconciliation /></RoleRoute>
+        </Route>
+        <Route path="/app/admin/orders">
+          <RoleRoute roles={["ADMIN"]}><AdminOrders /></RoleRoute>
+        </Route>
+        <Route path="/app/admin/users">
+          <RoleRoute roles={["ADMIN"]}><TestUsers /></RoleRoute>
+        </Route>
         <Route path="/app/admin/farmers">
           <RoleRoute roles={["ADMIN"]}>
             <FarmerApprovals />

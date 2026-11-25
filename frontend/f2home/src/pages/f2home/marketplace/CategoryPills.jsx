@@ -8,7 +8,7 @@ export default function CategoryPills({ counts = {}, activeId = null }) {
   const navigate = useNavigate();
 
   return (
-    <div className="-mx-4 overflow-x-auto px-4 sm:-mx-6 sm:px-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div className="overflow-x-auto px-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <div className="flex w-max gap-2 py-1">
         <Pill
           active={activeId === null}
@@ -31,15 +31,17 @@ export default function CategoryPills({ counts = {}, activeId = null }) {
   );
 }
 
-function Pill({ active, onClick, label, icon: Icon, count }) {
+function Pill({ active, onClick, label, icon, count }) {
+  const Icon = icon;
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm transition ${
+      aria-pressed={active}
+      className={`inline-flex items-center min-h-11 gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm transition ${
         active
-          ? "border-[#33691e] bg-[#33691e] text-white shadow-sm"
-          : "border-gray-200 bg-white text-gray-700 hover:border-[#8bc34a] hover:text-[#33691e] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+          ? "border-[#245730] bg-[#245730] text-white shadow-sm"
+          : "border-[#aeb9a2] bg-[#fffdf7] text-gray-700 hover:border-[#8bc34a] hover:text-[#33691e] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
       }`}
     >
       {Icon && <Icon className="h-3.5 w-3.5" />}

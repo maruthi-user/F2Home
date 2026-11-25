@@ -13,6 +13,13 @@
           "icon": "Home"
         },
         {
+          "id": "shop",
+          "name": "Marketplace",
+          "path": "/app/marketplace",
+          "icon": "Store",
+          "allowedRoles": ["CUSTOMER", "ADMIN"]
+        },
+        {
           "id": "vegetables",
           "name": "Vegetables",
           "path": "/app/marketplace/vegetables",
@@ -94,7 +101,7 @@
         },
         {
           "id": "farm-orders",
-          "name": "My Orders",
+          "name": "Fulfillment",
           "path": "/app/farm/orders",
           "icon": "ClipboardList",
           "allowedRoles": [
@@ -138,6 +145,28 @@
             "CUSTOMER",
             "ADMIN"
           ]
+        },
+        {
+          "id": "cod-reconciliation",
+          "name": "COD Reconciliation",
+          "path": "/app/admin/cod-reconciliation",
+          "icon": "Banknote",
+          "allowedRoles": ["ADMIN"]
+        },
+        {
+          "id": "admin-orders",
+          "name": "Order Operations",
+          "path": "/app/admin/orders",
+          "icon": "ClipboardList",
+          "allowedRoles": ["ADMIN"]
+        },
+        {
+          "id": "test-users",
+          "name": "User Management",
+          "path": "/app/admin/users",
+          "icon": "Users",
+          "allowedRoles": ["ADMIN"],
+          "testAccountsOnly": true
         },
         {
           "id": "farmer-approvals",
